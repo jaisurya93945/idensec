@@ -94,6 +94,51 @@ class TestDerivation:
         assert derive_contract("t", schema).parameter("to").description == "recipient"
 
 
+class TestDeriverRulesFoundByMeasurement:
+    """Both rules here fix a *dangerous miss* found by
+    benchmarks/contract_derivation.py -- an authority-bearing parameter drafted
+    as something weaker, which is a silent hole if a reviewer skims past it."""
+
+    @pytest.mark.parametrize(
+        "name",
+        ["message_id", "thread_id", "charge_id", "function_arn", "api_key",
+         "resource_uri", "callback_url", "file_path", "parent_ref", "session_token"],
+    )
+    def test_identifier_suffixes_outrank_content_hints(self, name: str) -> None:
+        """'message_id' reads as content and is a reference. Which-thing is
+        authority, and the suffix must win."""
+        contract = derive_contract("t", parameters=[name])
+        assert contract.parameter(name).role is Role.AUTHORITY
+
+    @pytest.mark.parametrize(
+        "flag", ["force", "recursive", "overwrite", "permanent", "purge", "cascade"]
+    )
+    def test_dangerous_booleans_stay_authority(self, flag: str) -> None:
+        """Booleans carry authority when they widen what an action destroys."""
+        schema = {"properties": {flag: {"type": "boolean"}}}
+        assert derive_contract("t", schema).parameter(flag).role is Role.AUTHORITY
+
+    def test_harmless_booleans_are_still_advisory(self) -> None:
+        schema = {
+            "properties": {
+                "verbose": {"type": "boolean"},
+                "dry_run": {"type": "boolean"},
+            }
+        }
+        contract = derive_contract("t", schema)
+        assert contract.parameter("verbose").role is Role.ADVISORY
+        assert contract.parameter("dry_run").role is Role.ADVISORY
+
+    def test_the_deriver_still_errs_toward_authority(self) -> None:
+        """Over-restriction costs review effort; under-restriction costs
+        security. When in doubt the draft must be restrictive."""
+        contract = derive_contract("t", parameters=["frobnicate", "widget", "zzz"])
+        assert all(
+            contract.parameter(n).role is Role.AUTHORITY
+            for n in ("frobnicate", "widget", "zzz")
+        )
+
+
 class TestEffects:
     def test_egress_detection(self) -> None:
         assert ToolContract(tool="t", effects=frozenset({Effect.NETWORK_EGRESS})).can_egress

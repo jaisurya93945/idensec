@@ -139,8 +139,8 @@ a substantially larger build (ADR-0009).
 | The listed attacks are refused | **Tested.** 46 cases, model-free, adversary controls the agent. |
 | The listed benign flows are allowed | **Tested.** 6 cases — a floor, not a utility measurement. |
 | Latency figures | **Measured**, on a shared unpinned host; spread reported. |
-| Extraction coverage is adequate | **Unmeasured.** |
-| Contract derivation is accurate | **Unmeasured.** |
+| Extraction coverage is adequate | **Measured** on a synthetic corpus: 93% recall, 0 false positives. Not measured against real traffic. |
+| Contract derivation is accurate | **Measured** on 25 hand-labelled schemas: 100% authority recall, 0 dangerous misses. Ground truth is our own. |
 | Task utility under enforcement | **Unmeasured.** The decisive number. |
 | Literature comparisons | **Unverified** — search summaries, not primary sources. |
 | Anyone wants this | **Unvalidated.** No users, no customers, no pilot. Every business statement in this repository is hypothesis. |

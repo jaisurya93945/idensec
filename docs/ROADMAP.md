@@ -19,7 +19,7 @@ additional engineering makes the project more true.
 | `blocked` | **Re-verify the literature against primary sources.** | Every comparative claim is currently `INFERENCE` from search summaries. Nothing comparative should be published outside this repository until this is done ([`RESEARCH.md`](RESEARCH.md)). |
 | `done` | **Extraction coverage study** (synthetic corpus) | 69% → 93% recall at zero false positives; six new kinds, three broadened patterns. Priced the `ipv4` trade-off rather than guessing it. [`BENCHMARKS.md`](BENCHMARKS.md). |
 | `next` | **Coverage against *real* MCP traffic** | The synthetic corpus measures our patterns against our own expectations. Real tool output is the actual question. |
-| `next` | **Contract derivation precision/recall** against a corpus of real JSON Schemas. | Decides whether the answer to policy sprawl actually works. |
+| `done` | **Contract derivation precision/recall** | 25 hand-labelled schemas: authority recall 95.2% → **100%**, dangerous misses 2 → **0**. Both misses were real deriver bugs, now regression-tested and gated in CI. [`BENCHMARKS.md`](BENCHMARKS.md). |
 
 ## Next: make it deployable
 

@@ -61,6 +61,21 @@ jobs:
       - name: Doctests
         run: python -c "import doctest, idensec, sys; sys.exit(bool(doctest.testmod(idensec).failed))"
 
+      - name: Contract derivation has no dangerous misses
+        # A dangerous miss is an authority-bearing parameter drafted as
+        # something weaker: a silent hole if a reviewer skims past it.
+        run: |
+          python benchmarks/contract_derivation.py --json derivation.json
+          python - <<'PY'
+          import json, sys
+          data = json.load(open("derivation.json"))
+          if data["dangerous_misses"]:
+              sys.exit(f"dangerous misses: {data['dangerous_misses']}")
+          if data["authority_recall"] < 1.0:
+              sys.exit(f"authority recall {data['authority_recall']:.0%} below 100%")
+          print("authority recall 100%, no dangerous misses")
+          PY
+
       - name: Contract linter is clean on shipped examples
         # Dogfooding: if our own contracts do not pass, nobody else's will.
         run: python -m idensec.lint examples/mcp/filesystem-contracts.json

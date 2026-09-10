@@ -261,7 +261,50 @@ _PAYLOAD_HINTS = (
     "prompt",
     "markdown",
     "html_body",
+    "reason",
 )
+
+_IDENTIFIER_SUFFIXES = (
+    "_id",
+    "_ids",
+    "_arn",
+    "_key",
+    "_uri",
+    "_url",
+    "_path",
+    "_ref",
+    "_handle",
+    "_token",
+)
+"""Suffixes that make a name an identifier, whatever else it contains.
+
+Measured against a hand-labelled corpus, the deriver's worst error was
+``reply_email.message_id`` drafted as PAYLOAD: "message" reads as content, and
+the suffix that turns it into a reference was ignored. A name ending in one of
+these denotes *which thing*, and which-thing is authority. The suffix wins over
+any content hint.
+"""
+
+_DANGEROUS_FLAGS = (
+    "force",
+    "recursive",
+    "overwrite",
+    "permanent",
+    "hard",
+    "purge",
+    "cascade",
+    "no_verify",
+    "skip_checks",
+    "allow_delete",
+    "confirm",
+    "yes",
+)
+"""Booleans that decide what happens to the world, not how it is presented.
+
+The other measured miss was ``git_push.force``, downgraded to ADVISORY for
+being a boolean. Booleans carry authority when they widen what an action
+destroys: --force overwrites history, recursive delete removes a tree.
+"""
 
 _ADVISORY_HINTS = (
     "limit",
@@ -276,6 +319,8 @@ _ADVISORY_HINTS = (
     "dry_run",
     "locale",
     "timezone",
+    "priority",
+    "style",
 )
 
 _KIND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
@@ -333,14 +378,18 @@ def derive_contract(
     for name in names:
         lowered = name.lower()
         prop = props.get(name, {}) if isinstance(props, Mapping) else {}
-        if lowered in _ADVISORY_HINTS:
+        if lowered.endswith(_IDENTIFIER_SUFFIXES):
+            # Checked first: an identifier suffix outranks every content hint.
+            role = Role.AUTHORITY
+        elif lowered in _DANGEROUS_FLAGS:
+            role = Role.AUTHORITY
+        elif lowered in _ADVISORY_HINTS:
             role = Role.ADVISORY
         elif any(hint == lowered or hint in lowered.split("_") for hint in _PAYLOAD_HINTS):
             role = Role.PAYLOAD
         elif isinstance(prop, Mapping) and prop.get("type") in {"boolean", "integer", "number"}:
-            # Numeric and boolean parameters cannot carry an identifier, but an
-            # amount very much carries authority, so only non-amount numerics
-            # are downgraded.
+            # Numerics and booleans cannot hold an identifier, but an amount
+            # very much carries authority, so only the rest are downgraded.
             role = Role.ADVISORY if not _looks_like_amount(lowered) else Role.AUTHORITY
         else:
             role = Role.AUTHORITY

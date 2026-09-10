@@ -180,6 +180,50 @@ against real traffic remains owed, and is listed below.
 
 ---
 
+## Contract derivation accuracy (2026-09-10)
+
+The claim that schema derivation answers policy sprawl was asserted repeatedly
+before it was measured. Against 25 hand-labelled tool schemas modelled on real
+MCP servers and common APIs — 71 parameters, 42 of them authority-bearing in
+ground truth:
+
+| | before | after |
+| --- | ---: | ---: |
+| authority recall | 95.2% | **100%** |
+| **dangerous misses** | **2** | **0** |
+| authority precision | 81.6% | 85.7% |
+| exact role match | 84.5% | 90.1% |
+| over-restrictions | 9 | 7 |
+
+**The metric is dangerous misses, not accuracy.** The two errors are wildly
+asymmetric: an authority-bearing parameter drafted as `PAYLOAD` is a silent hole
+if a reviewer skims past it, while a payload parameter drafted as `AUTHORITY`
+costs review effort and nothing else. A deriver that marked everything
+`AUTHORITY` would score zero dangerous misses and be useless, so precision is
+reported next to it rather than buried.
+
+The two misses were real bugs, and both are now regression-tested:
+
+- `reply_email.message_id` was drafted as `PAYLOAD`, because *message* reads as
+  content and the suffix that turns it into a reference was ignored. An
+  identifier suffix now outranks every content hint: which-thing is authority.
+- `git_push.force` was downgraded to `ADVISORY` for being a boolean. Booleans
+  carry authority when they widen what an action destroys, so `force`,
+  `recursive`, `overwrite`, `purge` and friends stay `AUTHORITY`.
+
+Only two over-restrictions were "fixed" (`reason` → payload, `priority`/`style`
+→ advisory). The rest — `pattern`, `query`, `payload`, `values`, `reference` —
+were left restrictive on purpose: `query` is SQL on some tools and prose on
+others, and the draft exists for a human to relax, not to be trusted as-is.
+
+CI fails on any dangerous miss or on recall below 100%.
+
+**Limitation:** ground truth is hand-labelled by us. These numbers measure the
+deriver against our own judgement of what carries authority, not against a
+neutral standard.
+
+---
+
 ## Method notes
 
 - One untimed warm-up call per measurement, so lazily compiled regexes and
@@ -202,5 +246,6 @@ against real traffic remains owed, and is listed below.
    above is a floor, not a substitute: it measures our patterns against our own
    idea of the world. What fraction of authority-bearing values in real MCP
    responses are recognised is still unmeasured.
-4. **Contract derivation precision/recall** — how often `derive_contract()`
-   drafts the right role for a real schema.
+4. **Contract derivation against schemas we did not write.** The corpus above
+   is modelled on real servers but labelled by us; running it against a large
+   set of published MCP schemas with independent labels is the real test.
