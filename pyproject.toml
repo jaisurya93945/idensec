@@ -53,6 +53,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S105", "S106"]
+# The fuzzer needs *reproducible* randomness, which is exactly what S311 warns
+# against using. A fixed seed is the feature: it makes a failure re-runnable
+# from the test name alone. No key material is generated here.
+"tests/test_fuzz.py" = ["S105", "S106", "S311"]
 
 [tool.mypy]
 python_version = "3.11"

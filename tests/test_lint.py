@@ -179,6 +179,54 @@ class TestDoesNotCryWolf:
         assert errors(diagnostics) == set()
 
 
+class TestFalsePositivesFoundAgainstRealServers:
+    """Both refinements here were forced by running the linter against the
+    reference MCP time server. A linter that reports errors on a correct
+    contract gets switched off, and then catches nothing at all."""
+
+    @pytest.mark.parametrize(
+        "name", ["target_timezone", "source_timezone", "output_format", "target_locale"]
+    )
+    def test_presentational_head_nouns_are_not_authority(self, name: str) -> None:
+        """'target' reads as authority; a timezone is not one."""
+        contract = ToolContract(
+            tool="convert_time",
+            parameters={name: ParameterContract(name, Role.ADVISORY)},
+            effects=frozenset({Effect.READ}),
+        )
+        assert errors(lint_contract(contract)) == set()
+
+    def test_the_exemption_does_not_cover_real_authority_names(self) -> None:
+        """target_url must still be flagged: no presentational token present."""
+        contract = ToolContract(
+            tool="t",
+            parameters={"target_url": ParameterContract("target_url", Role.PAYLOAD)},
+            effects=frozenset({Effect.NETWORK_EGRESS})
+            | frozenset({Effect.WRITE}),
+        )
+        assert "authority-name-downgraded" in errors(lint_contract(contract))
+
+    def test_read_only_tool_with_only_presentational_params_is_a_note(self) -> None:
+        """get_current_time(timezone) is a correct contract, not a problem."""
+        contract = ToolContract(
+            tool="get_current_time",
+            parameters={"timezone": ParameterContract("timezone", Role.ADVISORY)},
+            effects=frozenset({Effect.READ}),
+        )
+        diagnostics = lint_contract(contract)
+        assert errors(diagnostics) == set()
+        assert all(d.severity is Severity.NOTE for d in diagnostics)
+
+    def test_a_writing_tool_with_no_authority_parameter_is_still_flagged(self) -> None:
+        """The exemption is for read-only tools only."""
+        contract = ToolContract(
+            tool="wipe",
+            parameters={"confirm_text": ParameterContract("confirm_text", Role.PAYLOAD)},
+            effects=frozenset({Effect.DELETE}),
+        )
+        assert "no-authority-parameter" in errors(lint_contract(contract))
+
+
 class TestSourceGrants:
     def test_over_trusted_source_is_flagged(self) -> None:
         source = Source("web", Trust.USER_INPUT)

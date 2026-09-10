@@ -395,6 +395,48 @@ adapter we have not written yet.
 
 ---
 
+## Thread 3d — Validation against a real MCP server (2026-09-10)
+
+`EXPERIMENT` — Installed the reference `mcp-server-time` from PyPI and ran a
+full session through the IDENSEC proxy: `initialize`, `tools/list`,
+`--emit-contracts`, an allowed `tools/call`, and a call to a tool with no
+contract. Real server, real protocol, real pipes — the first validation against
+software we did not write.
+
+`RESULT` — The chain works end to end. The handshake passes through untouched,
+contracts draft correctly from the server's advertised schemas, a legitimate
+call returns real data, and an uncontracted tool is refused with
+`unknown_tool` plus `unattributed_authority`.
+
+`RESULT` — **A linter false positive, found within minutes of touching real
+software.** `convert_time` declares `target_timezone`; "target" is in the
+linter's authority-token list, so a correct contract drew two errors. Our own
+test file asserts that a linter which cries wolf gets switched off, so this was
+a defect by our own standard. Fixed with a presentational-token exemption
+(`timezone`, `locale`, `format`, `encoding`, …) that suppresses the
+authority-name check without weakening it for names like `target_url`.
+
+`RESULT` — Second false positive: a read-only tool whose parameters are all
+presentational — `get_current_time(timezone)` — was reported as
+`no-authority-parameter` at WARNING. That is a correct contract. Downgraded to
+NOTE for tools whose effects are read-only; still an error for anything that
+writes or deletes.
+
+`INFERENCE` — Both defects were in a component that had 37 passing tests, all
+written by its author. The general lesson is the one already recorded in
+[`REVIEW.md`](REVIEW.md): our own tests encode our own expectations, and contact
+with software we did not write is a different and better source of evidence.
+
+`FACT` — One deriver inconsistency observed and deliberately **not** fixed:
+`timezone` alone drafts as ADVISORY while `source_timezone` drafts as
+AUTHORITY, because advisory hints match exactly and identifier-ish names do
+not. The inconsistency is in the safe direction (over-restrictive), and making
+advisory matching token-based would risk downgrading names like
+`limit_amount`. Churning a measured component for a cosmetic gain is the wrong
+trade; recorded instead.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

@@ -74,9 +74,9 @@ TOOLS = [
 ]
 
 WORDS = (
-    "incident outage deploy rollback service latency queue cache token report "
-    "summary escalate compliance urgent please note also however therefore"
-).split()
+    "incident", "outage", "deploy", "rollback", "service", "latency", "queue", "cache",
+    "token", "report",
+)
 
 TLDS = ["example", "test", "invalid", "corp.example", "evil.example"]
 

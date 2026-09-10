@@ -55,6 +55,14 @@ but do not describe the deployment as enforcing anything.
 
 ---
 
+## Validated against a real server
+
+The reference `mcp-server-time` was installed from PyPI and driven through the
+proxy end to end — handshake, `tools/list`, contract drafting, an allowed call
+returning real data, and an uncontracted tool refused. First contact with
+software we did not write also produced two linter false positives, both since
+fixed; see [`RESEARCH.md`](RESEARCH.md) Thread 3d.
+
 ## Quick start
 
 **1. Draft contracts from the server's own schemas.** This is the answer to

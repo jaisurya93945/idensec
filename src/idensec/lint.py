@@ -84,6 +84,21 @@ _AMOUNT_TOKENS = frozenset(
     ["amount", "total", "price", "value", "quantity", "qty", "sum", "limit_amount", "balance"]
 )
 
+_PRESENTATION_TOKENS = frozenset(
+    (
+        "timezone", "tz", "locale", "language", "lang", "encoding", "charset",
+        "format", "unit", "units", "precision", "granularity",
+    )
+)
+"""Head nouns that make a name presentational whatever else it contains.
+
+Found by running the linter against the reference MCP time server, which
+declares ``target_timezone``. "target" reads as authority; a timezone is not
+one. Without this exemption the linter reports an error on a correct contract,
+and a linter that cries wolf gets switched off -- after which it catches
+nothing at all.
+"""
+
 _DANGEROUS_EFFECTS = frozenset(
     {
         Effect.WRITE,
@@ -105,7 +120,10 @@ def _tokens(name: str) -> set[str]:
 
 
 def _reads_as_authority(name: str) -> bool:
-    return bool(_tokens(name) & _AUTHORITY_TOKENS)
+    tokens = _tokens(name)
+    if tokens & _PRESENTATION_TOKENS:
+        return False
+    return bool(tokens & _AUTHORITY_TOKENS)
 
 
 def _reads_as_amount(name: str) -> bool:
@@ -149,9 +167,14 @@ def lint_contract(contract: ToolContract) -> list[Diagnostic]:
     ]
 
     if contract.parameters and not authority_params:
+        # A read-only tool whose parameters are all presentational is a normal,
+        # correct thing -- get_current_time(timezone) is the canonical example.
+        # Reporting it as a problem trains operators to ignore the linter.
         severity = (
             Severity.ERROR
             if contract.effects & _DANGEROUS_EFFECTS
+            else Severity.NOTE
+            if contract.effects <= {Effect.READ}
             else Severity.WARNING
         )
         found.append(
