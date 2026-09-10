@@ -8,4 +8,4 @@
 #
 # To add a maintainer: append their public key, and have an existing maintainer
 # sign the commit that adds it.
-noreply@anthropic.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKy87HxSEheG8vEPhSs9u2KZCtVErAQfpmprtUJCZ2w7
+jaisurya3450@gmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ8RJaLUIp332BKdDh/5yKFYAvM/ofJM+cSkoL2B0SNf
