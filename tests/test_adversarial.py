@@ -380,6 +380,46 @@ class TestDenialOracle:
         )
 
 
+class TestSealingIsUniform:
+    """Sealing must not depend on whether a value is already trusted.
+
+    It is tempting to skip sealing for operands already known from the
+    principal's task -- the value is authorised anyway, and leaving it in clear
+    makes tool output more readable. That optimisation is a side channel: the
+    attacker plants candidate values in a page and observes which come back
+    unsealed, turning the read boundary into an oracle for the contents of the
+    principal's instruction.
+
+    These tests exist to stop a future reader making that change.
+    """
+
+    def test_trusted_values_are_still_sealed_when_they_arrive_untrusted(
+        self, session
+    ) -> None:
+        session.observe("principal", "mail the summary to ana@corp.example")
+        echoed = session.observe("web", "confirmation: delivered to ana@corp.example")
+        assert "ana@corp.example" not in echoed, (
+            "sealing must be uniform; skipping known-trusted values would leak "
+            "the contents of the principal's task"
+        )
+
+    def test_an_attacker_cannot_distinguish_known_from_unknown_values(
+        self, session
+    ) -> None:
+        session.observe("principal", "mail the summary to ana@corp.example")
+        probe = session.observe(
+            "web", "candidates: ana@corp.example bob@corp.example carol@corp.example"
+        )
+        assert probe.count("[[idn:email:") == 3, "every candidate must look identical"
+
+    def test_an_echoed_trusted_value_is_still_usable(self, session) -> None:
+        """The other half: uniform sealing must not cost utility. The handle
+        merges origins, so the principal's authority survives the round trip."""
+        session.observe("principal", "mail the summary to ana@corp.example")
+        echoed = session.observe("web", "delivered to ana@corp.example")
+        assert session.admit("send_email", {"to": seals(echoed)[0], **MAIL}).allowed
+
+
 class TestKnownGaps:
     """Failures we can demonstrate and have chosen not to paper over."""
 
