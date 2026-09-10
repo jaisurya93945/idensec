@@ -65,6 +65,11 @@ genuinely considered, evidence, decision, what was rejected, what it costs.
 Decisions to *remove* or *not build* get the same treatment — knowing what not
 to build is most of the work.
 
+**Milestones get a review entry** in [`docs/REVIEW.md`](docs/REVIEW.md),
+answering what was learned, which assumption was wrong, what should be removed,
+and whether the project should still exist. If an entry reads as comfortable, it
+was written badly.
+
 **Research findings go in the ledger** with an explicit confidence tag: `FACT`,
 `INFERENCE`, `HYPOTHESIS`, `EXPERIMENT`, `RESULT`. Nothing is promoted to `FACT`
 without a source or an experiment. Do not present inference as fact, and do not

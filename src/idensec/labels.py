@@ -162,12 +162,6 @@ class Attribution:
             return Sensitivity.PUBLIC
         return max(o.sensitivity for o in self.origins)
 
-    @property
-    def max_trust(self) -> Trust:
-        if not self.origins:
-            return Trust.TOOL_DESCRIPTION
-        return max(o.trust for o in self.origins)
-
     def is_authorised_for(self, kind: str, sources: dict[str, Source]) -> bool:
         """Existential authority check (ADR-0008).
 

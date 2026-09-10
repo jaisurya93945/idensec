@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import bisect
 import re
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 __all__ = [
@@ -358,12 +358,3 @@ def classify(value: str, kinds: Sequence[str] | None = None) -> str | None:
         if kind.accepts(value) and _plausible(kind.name, value.strip()):
             return kind.name
     return None
-
-
-def iter_kinds() -> Iterator[OperandKind]:
-    yield from sorted(KIND_REGISTRY.values(), key=lambda k: k.priority)
-
-
-def kind_table() -> Mapping[str, str]:
-    """Human-readable registry dump, used by the docs and the CLI."""
-    return {k.name: k.description for k in iter_kinds()}

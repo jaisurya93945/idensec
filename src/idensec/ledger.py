@@ -136,10 +136,6 @@ class Resolution:
     spans: tuple[ResolvedSpan, ...] = ()
     unknown_seals: tuple[str, ...] = ()
 
-    @property
-    def had_seals(self) -> bool:
-        return bool(self.spans) or bool(self.unknown_seals)
-
     def covers(self, start: int, end: int) -> ResolvedSpan | None:
         """Return the handle-produced span fully containing ``[start, end)``.
 
@@ -189,9 +185,6 @@ class OperandLedger:
     @property
     def operands(self) -> tuple[Operand, ...]:
         return tuple(sorted(self._by_key.values(), key=lambda o: (o.kind, o.normalised)))
-
-    def by_id(self, operand_id: str) -> Operand | None:
-        return self._by_id.get(operand_id)
 
     def lookup(self, kind: str, value: str) -> Operand | None:
         return self._by_key.get((kind, normalise(kind, value)))

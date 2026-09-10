@@ -258,6 +258,7 @@ and until it exists IDENSEC makes no utility claim.
 | [`DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) | ADRs, including what was rejected |
 | [`BENCHMARKS.md`](docs/BENCHMARKS.md) | Numbers and method |
 | [`ROADMAP.md`](docs/ROADMAP.md) | What is next, and the ten-year test |
+| [`REVIEW.md`](docs/REVIEW.md) | Milestone self-criticism, written to be uncomfortable |
 
 ## Why this exists
 
