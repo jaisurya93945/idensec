@@ -445,13 +445,14 @@ published ground truth in both directions: the injection tasks' attacker calls
 in-scope security cases, four suites. Method and the artefacts we had to author:
 [`benchmarks/agentdojo/README.md`](../benchmarks/agentdojo/README.md).
 
-`RESULT` — **Security 560/609 (92.0%), utility 55/97 (56.7%)**, under the best
-labelling we could write, with the model assumed to be *always* hijacked.
+`RESULT` (**first pass** — superseded by the second-pass entry below, kept
+because the ledger is a record of what was known when) — Security 560/609
+(92.0%), utility 55/97 (56.7%), with the model assumed to be *always* hijacked.
 
 `RESULT` — **Source labelling is the dominant variable, and per-source grants
 are the wrong shape.** Authoritative-for-nothing gave 95.4%/34.0%;
 authoritative-for-everything gave 55.8%/45.4% — worse on *both* axes.
-Path-scoped grants gave 92.0%/56.7%. The cause is structural: legitimate
+Path-scoped grants gave 92.0%/56.7% at that stage. The cause is structural: legitimate
 addresses live in `sender`/`recipients`/`participants` while every injection
 lives in `description`/`content`/`reviews`, and both arrive from one source.
 This produced a new capability (`Source.authoritative_paths`) rather than a
@@ -472,7 +473,7 @@ attacks whose target call carries no authority-bearing argument.**
 `email` (breaking every IBAN transfer), `url` constrained to `url` (breaking
 every scheme-less fetch), temporal parameters treated as authority-bearing (the
 single largest source of false denials), and `*_id` constrained to the `uuid`
-kind. Utility went 22.7% → 56.7% with no security loss.
+kind. Utility went 22.7% → 56.7% with no security loss in that pass.
 
 `RESULT` (**uncomfortable, recorded as such**) — 56.7% is above PACT's
 *deployed* row (38–46%) and far below its *oracle* row. By the falsification criterion
@@ -481,6 +482,32 @@ disproof than to confirmation. The thesis is **not yet disproven** — the numbe
 moved 29 points in one sitting under obvious fixes and has not converged — but
 it is now the only thing on the roadmap that matters, and leaving it at 56.7%
 while building features would be the dishonest outcome.
+
+`RESULT` (**second pass, after fixing what the first pass exposed**) — The
+measurement is a curve, not a number: 95.4% security at 34.0% utility with no
+authority granted, 85.1%/76.3% with directories granted and magnitudes budgeted.
+**No configuration reaches 90% security and 70% utility together.**
+
+`INFERENCE` — **The binding constraint is entity selection, and it is not
+something determinism can fix.** Every bug fixed in this pass bought utility at
+zero security cost; security fell only where a human widened a *grant*. A large
+fraction of real agent work is selecting an existing entity — reschedule *that*
+event, share *that* file — and when the directory is untrusted, provenance must
+either refuse the selection or trust the directory, which admits an injection
+naming a legitimate entry. This is a question about intent, not origin, so
+**oracle provenance would not resolve it either**.
+
+`HYPOTHESIS` — PACT's reported oracle row (100% utility at 100% security) is
+hard to reconcile with entity-selection workflows, which suggests its diagnostic
+suites may not contain that pattern. **Unverifiable here** — the paper is not
+reachable from this environment, and this is recorded as a hypothesis about a
+paper we have not read, not as a criticism of it.
+
+`DECISION` — Narrow the claim to what the evidence supports rather than restate
+it: IDENSEC contains attacks that introduce a new destination, and is
+structurally blind to attacks that select among legitimate ones. Recorded in
+[`REVIEW.md`](REVIEW.md), and the README, threat model and limitations now say
+it in those words.
 
 `FACT` — Effect classes and scoped grants were hand-authored per API by people
 who do not own those APIs. That is the policy-sprawl objection this project

@@ -23,11 +23,13 @@ No model in the decision path. No network calls. No runtime dependencies. The
 same trace always produces the same verdict.
 
 > **Status: 0.1, early and unreviewed.** Measured against AgentDojo with no
-> model in the loop: **92.0% security** (assuming the model is *always*
-> hijacked) at **56.7% utility**. That utility number is below what this
-> project's own thesis predicts, and
-> [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) §2 says so plainly rather than
-> burying it. Read that before anything else here.
+> model in the loop, the result is a **trade-off curve, not a number**: 95.4%
+> security at 34.0% utility with no authority granted, 85.1% at 76.3% with
+> directories granted. **No configuration reaches 90% security and 70% utility
+> together.** The project's own falsification criterion asked for both and did
+> not get them — [`docs/REVIEW.md`](docs/REVIEW.md) says so in its own title.
+> Read that and [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) before anything
+> else here.
 
 ---
 
@@ -233,26 +235,30 @@ bugs each measurement found are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 **Against AgentDojo** — 97 user tasks, 609 in-scope security cases, no model
 involved. Security assumes the model is *always* hijacked, which is harsher than
-AgentDojo's own metric. Utility replays the ground-truth calls a *correct* agent
-would make, and is therefore a lower bound.
+AgentDojo's own metric; utility replays the calls a *correct* agent would make
+and is a lower bound.
 
-| labelling | security | utility |
+| authority granted to the workspace | security | utility |
 | --- | ---: | ---: |
-| workspace authoritative for nothing | 95.4% | 34.0% |
-| authoritative for everything | 55.8% | 45.4% |
-| **authoritative per field path** | **92.0%** | **56.7%** |
+| nothing | **95.4%** | 34.0% |
+| every kind, everywhere | 55.8% | 46.4% |
+| per field path | 85.7% | 68.0% |
+| per field path + budgets for magnitudes | 85.1% | **76.3%** |
 
-Every one of the 49 escapes is traced to a cause, and all of them fall into
-limitations documented *before* the measurement existed. The boundary it draws:
+Every one of the escapes is traced to a cause, and all fall into limitations
+documented *before* the measurement existed. The boundary it draws:
 
 > IDENSEC contains attacks that **introduce a new destination**. It does not
 > contain attacks that merely **select among legitimate ones**, nor attacks
 > whose target call has **no authority-bearing argument** at all.
 
-**56.7% is below what this project's thesis predicts,** and closer to the range
-at which [`docs/REVIEW.md`](docs/REVIEW.md) said the thesis should be considered
-wrong. It moved from 22.7% to 56.7% in one sitting on contract fixes, so it has
-not converged — but raising it is now the only thing on the roadmap that matters.
+**The exchange rate is the finding.** Granting a workspace authority over its own
+entity directories is worth 35 points of utility, because most agent work is
+selecting an existing entity — reschedule *that* event, share *that* file. It
+costs security for the same reason: an injection reading *"delete file 13"* names
+a file that really is in the directory. **Oracle provenance would not help** —
+knowing where a value came from does not tell you whether the principal meant
+it.
 
 **Latency** — `admit()` is sub-millisecond at typical session length:
 

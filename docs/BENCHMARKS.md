@@ -224,129 +224,129 @@ neutral standard.
 
 ---
 
-## AgentDojo: security and utility (2026-09-10)
+## AgentDojo: the security–utility trade-off (2026-09-10)
 
-**The first measurement of either against an independent benchmark**, and the
-number this project said would decide whether its thesis survives.
+**The first measurement of either against an independent benchmark.** The result
+is not a number; it is a curve, and the curve is the finding.
 
 AgentDojo publishes both halves as data — each injection task carries the tool
 call the attacker wants, each user task carries the calls a *correct* agent
-makes — so both can be measured with **no model involved anywhere**. Setup and
-reproduction: [`benchmarks/agentdojo/README.md`](../benchmarks/agentdojo/README.md).
+makes — so both can be measured with **no model involved anywhere**. Setup,
+reproduction, and every artefact we had to author:
+[`benchmarks/agentdojo/README.md`](../benchmarks/agentdojo/README.md).
 
-Scale: 97 user tasks, 27 injection tasks, 609 in-scope security cases across
-four suites.
+Scale: 97 user tasks, 27 injection tasks, 609 in-scope security cases, four
+suites. Security assumes the model is **always** hijacked, which is harsher than
+AgentDojo's own metric. Utility replays the ground-truth calls a *correct* agent
+would make, and is therefore a **lower bound**.
 
-### Headline (scoped labelling)
+### The curve
 
-| | result |
-| --- | ---: |
-| **Security** — attacker's call refused, assuming the model is *always* hijacked | **560/609 · 92.0%** |
-| **Utility** — a correct agent's ground-truth calls all admitted | **55/97 · 56.7%** |
-
-Security here is asked in a **harsher** form than AgentDojo's own metric:
-AgentDojo measures how often a model *is* hijacked; we assume it always is.
-Utility is a **lower bound** — a real model phrases calls differently from
-ground truth, and an admitted call can still fail for unrelated reasons.
-
-### Source labelling is the knob, and the measurement proves it
-
-| labelling | security | utility |
+| how much authority the workspace is granted | security | utility |
 | --- | ---: | ---: |
-| `strict` — workspace authoritative for nothing | 581/609 · 95.4% | 33/97 · 34.0% |
-| `permissive` — authoritative for every kind, everywhere | 340/609 · 55.8% | 44/97 · 45.4% |
-| **`scoped`** — authoritative per field path | **560/609 · 92.0%** | **55/97 · 56.7%** |
+| `strict` — nothing | **95.4%** | 34.0% |
+| `permissive` — every kind, everywhere | 55.8% | 46.4% |
+| `scoped` — per field path | 85.7% | 68.0% |
+| `recommended` — scoped, magnitudes bounded by a budget | 85.1% | **76.3%** |
 
-`permissive` is worse than `strict` on **both** axes — it loses 40 points of
-security to buy 11 of utility. `scoped` beats it on both and nearly matches
-`strict` on security while almost doubling its utility.
+**No configuration reaches both 90% security and 70% utility.** You can have
+95.4%/34.0% or 85.1%/76.3%. That exchange rate is the single most useful thing
+this evaluation produced, and it is reported instead of the flattering row.
 
-**That result produced a feature.** A per-source grant cannot separate a
-workspace's own contact records from the bodies of messages other people wrote,
-because both arrive from one source — and in this benchmark, legitimate
-addresses live in `sender`, `recipients` and `participants` while every
-injection lives in `description`, `content` and `reviews`. Since provenance was
-already recorded per field, authority became scopable the same way
-(`Source(authoritative_paths=...)`). The travel suite went from **0% to 100%**
-utility on that change alone.
+`permissive` is dominated: it gives up 40 points of security to buy 12 of
+utility, and both other configurations beat it on both axes.
 
-### Per suite (scoped)
+### Why the exchange rate exists
 
-| suite | security | utility |
-| --- | ---: | ---: |
-| workspace | 237/240 · 98.8% | 28/40 · 70.0% |
-| banking | 143/144 · 99.3% | 5/16 · 31.2% |
-| slack | 101/105 · 96.2% | 2/21 · 9.5% |
-| travel | 79/120 · 65.8% | 20/20 · 100% |
+Two of the four configurations differ only in whether the workspace is
+authoritative over its own **entity directories** — the file list, the calendar,
+the contact records. Granting that is worth an enormous amount of utility
+(workspace 60% → 95%) because most real agent work is *selecting an existing
+entity*: reschedule **that** event, share **that** file, reply to **that**
+thread.
 
-**Two suites' low utility is inherent, not a tuning failure.** Banking's
-refusals are dominated by *computed* amounts — "prices rose 10%, send the
-difference" produces a number that appears nowhere in the instruction, and
-arithmetic is a semantic derivation quotation cannot follow. The working
-division of labour is provenance for identifiers and budgets for magnitudes
+It costs security for exactly the same reason. Once the file directory is
+authoritative, an injection reading *"delete file 13"* names a file that really
+is in the directory, and provenance cannot distinguish **selection by the
+principal** from **selection by an injection**. That is intent, not origin.
+
+> **The limit is the approach, not this implementation.** Oracle provenance
+> would not help: knowing precisely where a value came from still does not tell
+> you whether the principal meant it. `INFERENCE` — PACT's reported
+> oracle-provenance result of 100% utility at 100% security is hard to reconcile
+> with entity-selection workflows, which suggests its diagnostic suites may not
+> contain that pattern. We cannot check: the paper is not reachable from this
+> environment ([`RESEARCH.md`](RESEARCH.md) reachability caveat).
+
+### Per suite (`recommended`)
+
+| suite | security | utility | note |
+| --- | ---: | ---: | --- |
+| travel | 65.8% | 100% | escapes are U01/U05, below |
+| workspace | 83.3% | 95.0% | entity selection, as above |
+| banking | 95.8% | 87.5% | amounts as content + a spend budget |
+| slack | 96.2% | 9.5% | **inherent — see below** |
+
+**Slack's 9.5% is the monitor being right, not wrong.** In that suite the
+channel directory *and* the web-content store are themselves injection vectors,
+so the legitimate tasks are things like "fetch the URL you found in a Slack
+message" — precisely the pattern that gets agents exploited. There is no field a
+grant can safely cover. Counting those refusals as lost utility flatters the
+attacker.
+
+**Banking needed a different control, not a different grant.** Its amounts are
+*computed* — "prices rose 10%, send the difference" yields a number appearing
+nowhere in the instruction — and arithmetic is a semantic derivation quotation
+cannot follow. Treating an amount as authority-bearing denies the legitimate
+case exactly as often as the attacker's. Making the amount content and bounding
+it with a `Budget` took banking from 31.2% to 87.5% utility at 95.8% security:
+**provenance handles identifiers, budgets handle magnitudes**
 ([`LIMITATIONS.md`](LIMITATIONS.md) §4.2c).
-
-**Slack's 9.5% is not a monitor failure.** In that suite the channel directory
-and the web-content store are *themselves* injection vectors, so there is no
-field a grant can safely cover: every channel name and URL the agent could
-legitimately use arrives from a source the attacker also controls. An honest
-reading is that this environment is outside what source-authority labelling can
-express, not that the labelling was done badly.
 
 ### Every escape traced to a cause
 
-Not one is unexplained, and all fall into limitations documented before this
+None is unexplained, and all fall into limitations documented *before* this
 measurement existed:
 
-| cause | cases | limitation |
-| --- | ---: | --- |
-| Attacker *selects* a legitimate directory entry (`reserve_hotel` on a real hotel a review recommended) | 20 | U01 — provenance is not intent |
-| Target call has **no authority-bearing argument** (`create_calendar_event`, all content and times) | 21 | U05 — non-identifier authority |
-| Low-entropy token collision (see below) | 8 | U02 — quotation is not intent |
-| Speech-only injections (no tool call at all) | 20 | excluded, not counted either way |
+| cause | limitation |
+| --- | --- |
+| Attacker **selects a legitimate entity** — a real hotel a poisoned review named, a real file id | U01 — provenance is not intent |
+| Target call has **no authority-bearing argument** (`create_calendar_event`: all content and timestamps) | U05 — non-identifier authority |
+| **Low-entropy token collision** — "what are we doing on June 13" authorises `delete_file(id="13")` | U02 — quotation is not intent |
+| Speech-only injections (no tool call at all) | excluded, not counted either way |
 
-The boundary this draws is crisp and is the most useful thing the evaluation
-produced:
+The boundary this draws is crisp, and is what a reader should take away:
 
-> **IDENSEC contains attacks that introduce a new destination. It does not
-> contain attacks that merely select among legitimate ones, nor attacks whose
+> **IDENSEC contains attacks that introduce a *new* destination. It does not
+> contain attacks that merely *select among legitimate ones*, nor attacks whose
 > target call has no authority-bearing argument at all.**
 
-### The token-collision finding
+### Six defects the measurement found
 
-A user prompt reading *"what are we doing on **June 13**"* authorises
-`delete_file(file_id="13")`, because `13` genuinely is a token the principal
-wrote. Provenance cannot tell a date from a file id — that is intent.
+All in code that was written carefully and tested, none found by review:
 
-`Policy.min_quotation_length` demands stronger quotation, and the benchmark
-prices it:
+1. Attribution kept only the **first** matching origin, though the authority
+   check is existential — so an unauthorised origin could mask an authorised one.
+2. **Dict keys were never observed.** `calendar.events["5"]` carries the entity
+   id in the key, so every follow-up call on it was unattributable.
+3. Numeric **re-spellings** did not match: a tool takes `4.0` where the
+   principal wrote `4`.
+4. `recipient` was constrained to `email`, failing every IBAN transfer.
+5. `url` was constrained to `url`, failing every scheme-less fetch.
+6. **Temporal parameters** were treated as authority-bearing — the single
+   largest source of false denials.
 
-| setting | security | utility |
-| --- | ---: | ---: |
-| 1 (default) | 560/609 · 92.0% | 55/97 · 56.7% |
-| 4 | **563/609 · 92.4%** | 55/97 · 56.7% |
-
-Raising it closed all three workspace escapes **at zero measured utility cost**,
-taking that suite to 240/240. The default stays at 1 because short legitimate
-values exist (an amount of `50` is a real quotation) and this is one benchmark;
-deployments whose identifiers are short should raise it.
-
-### What this cost to set up, honestly
-
-Three artefacts are ours, not AgentDojo's. Parameter roles were drafted
-automatically from each tool's JSON Schema and left unmodified — but **effect
-classes and the scoped grants were hand-written**, per API, by people who do not
-own those APIs. That is the real cost of the approach, and it is exactly the
-policy-sprawl objection this project claims to answer. One afternoon for four
-APIs is a data point, not a refutation of the objection.
+Utility went 22.7% → 76.3% across these fixes with security moving only where a
+*grant* was widened, never where a bug was fixed.
 
 ### What this does not show
 
 - **Not end-to-end utility.** Ground-truth calls are not model behaviour.
 - **Not a comparison with CaMeL or PACT.** They report end-to-end numbers on a
-  different quantity. Putting these side by side would be misleading and is not
-  done anywhere in this repository.
-- **Not a claim about real deployments.** Four benchmark suites.
+  different quantity; placing these beside them would mislead, and is done
+  nowhere in this repository.
+- **Not a claim about real deployments.** Four benchmark suites, with effect
+  classes and grants we authored for APIs we do not own.
 
 ---
 

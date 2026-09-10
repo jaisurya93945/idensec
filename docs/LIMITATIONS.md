@@ -21,49 +21,47 @@ attacks, does not verify identity, and does not know what the principal meant.
 
 ---
 
-## 2. Measured, and not yet good enough: the utility cost
+## 2. Measured: a trade-off, not a number, and the claim is narrowed to match
 
-**This was listed here as the most important unknown. It is now measured, and
-the result is uncomfortable.**
+**This was listed as the most important unknown. It is now measured, and the
+result changed what this project claims.**
 
 Against AgentDojo — 97 user tasks, 609 in-scope security cases, no model
-involved — with the best labelling we could write:
+involved:
 
-| | |
-| --- | ---: |
-| Security (assuming the model is *always* hijacked) | 560/609 · **92.0%** |
-| Utility (a correct agent's ground-truth calls admitted) | 55/97 · **56.7%** |
+| authority granted to the workspace | security | utility |
+| --- | ---: | ---: |
+| nothing | **95.4%** | 34.0% |
+| every kind, everywhere | 55.8% | 46.4% |
+| per field path | 85.7% | 68.0% |
+| per field path + budgets for magnitudes | 85.1% | **76.3%** |
 
-Full method, per-suite breakdown and cause analysis in
-[`BENCHMARKS.md`](BENCHMARKS.md).
+**No configuration reaches 90% security and 70% utility together.** The
+project's own falsification criterion asked for exactly that
+([`REVIEW.md`](REVIEW.md)), and it was missed on the security side.
 
-**Against this project's own falsification criterion, that is closer to failure
-than to success.** [`REVIEW.md`](REVIEW.md) stated it before the number existed:
-the thesis predicts near-oracle utility, and *"if a utility measurement lands
-nearer 38–46% than 90%+, the thesis is wrong, determinism was not the binding
-constraint"*. 56.7% is above that range and still far below what the thesis
-predicts.
+**Why, and why determinism was not the problem.** Every bug fixed during that
+pass bought utility at *zero* security cost. Security fell only where a human
+widened a **grant**. The binding constraint is that a large fraction of real
+agent work is **selecting an existing entity** — reschedule *that* event, share
+*that* file — and when the directory is untrusted, provenance must either refuse
+the selection or trust the directory, which admits an injection naming a
+legitimate entry. That is a question about intent, not origin, so **oracle
+provenance would not resolve it either**.
 
-Four things are true about that number, and none of them is a reason to dismiss
-it:
+**The claim is therefore narrowed rather than restated:** IDENSEC contains
+attacks that *introduce* a new destination, and is structurally blind to attacks
+that *select among legitimate ones*. The cost of that blindness is now measured
+rather than assumed.
 
-1. **It is a lower bound.** Ground-truth calls are not model behaviour, and a
-   real agent reads before it writes — read paths are admitted far more often
-   than write paths.
-2. **Slack's 9.5% is not a monitor failure.** In that suite the channel
-   directory and web-content store are themselves injection vectors, so no field
-   grant is safe. That environment is outside what source labelling can express.
-3. **Most remaining refusals were contract quality, not the monitor.** Fixing
-   two deriver bugs and adding field-scoped grants took the total from 22.7% to
-   56.7% without weakening security. There is more of that available.
-4. **The setup cost is the objection.** Effect classes and scoped grants were
-   hand-written per API. That is the policy-sprawl problem this project claims
-   to answer, and one afternoon for four APIs does not answer it.
+Two suites' numbers are inherent rather than tuning failures:
 
-**The obligation this creates:** the next milestone either raises this number
-materially with better contracts and grants, or the thesis is wrong and should
-be recorded as disproven in [`RESEARCH.md`](RESEARCH.md). It should not be
-allowed to sit at 56.7% while features accumulate around it.
+- **Slack, 9.5% utility** — its channel directory and web-content store are
+  *themselves* injection vectors, so the legitimate tasks are things like "fetch
+  the URL you found in a Slack message". Those refusals are the monitor being
+  right.
+- **Banking, 31.2% → 87.5%** — its amounts are *computed*, and needed a
+  different control rather than a different grant. See §4.2c.
 
 ## 3. Unverified: the research foundation
 
@@ -211,7 +209,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | Latency figures | **Measured**, on a shared unpinned host; spread reported. |
 | Extraction coverage is adequate | **Measured** on a synthetic corpus: 93% recall, 0 false positives. Not measured against real traffic. |
 | Contract derivation is accurate | **Measured** on 25 hand-labelled schemas: 100% authority recall, 0 dangerous misses. Ground truth is our own. |
-| Task utility under enforcement | **Measured**: 56.7% on AgentDojo ground-truth replay, against 92.0% security. A lower bound, and below what the thesis predicts. |
+| Task utility under enforcement | **Measured**: a curve. 95.4% security at 34.0% utility, or 85.1% at 76.3%. Never both above 90/70. |
 | Literature comparisons | **Unverified** — search summaries, not primary sources. |
 | Anyone wants this | **Unvalidated.** No users, no customers, no pilot. Every business statement in this repository is hypothesis. |
 

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from conftest import READ_FILE
 from helpers import seals
 from idensec import (
     OBSERVE,
     STRICT,
     SUPERVISED,
+    UNCLASSIFIED,
     Disposition,
     Effect,
     FindingCode,
@@ -58,6 +60,52 @@ class TestObserve:
             "ok": True,
             "none": None,
         }
+
+
+class TestKeysAreData:
+    """A tool result shaped as {"events": {"5": {...}}} carries the entity id in
+    the *key*, not in any leaf. A walk that visits only leaves never sees it, so
+    the id the agent must pass back is attributable to nothing and every
+    legitimate follow-up call is refused. Measured on AgentDojo, this was the
+    single largest remaining source of false denials in the workspace suite.
+    """
+
+    def test_dict_keys_are_indexed_with_their_collection_path(self, ids) -> None:
+        session = Session(
+            contracts=[READ_FILE],
+            sources=[
+                Source("principal", Trust.USER_INPUT),
+                Source(
+                    "ws",
+                    Trust.TOOL_UNTRUSTED,
+                    authoritative_paths={"**.files": frozenset({UNCLASSIFIED})},
+                ),
+            ],
+            id_factory=ids,
+        )
+        session.observe("principal", "read the report")
+        session.observe("ws", {"drive": {"files": {"11": {"name": "report"}}}})
+        assert session.admit("read_file", {"path": "11"}).allowed
+
+    def test_a_key_from_an_ungranted_collection_is_still_refused(self, ids) -> None:
+        session = Session(
+            contracts=[READ_FILE],
+            sources=[
+                Source("principal", Trust.USER_INPUT),
+                Source("ws", Trust.TOOL_UNTRUSTED),
+            ],
+            id_factory=ids,
+        )
+        session.observe("principal", "read the report")
+        session.observe("ws", {"drive": {"files": {"11": {"name": "report"}}}})
+        assert not session.admit("read_file", {"path": "11"}).allowed
+
+    def test_keys_are_indexed_not_sealed(self, session) -> None:
+        """Rewriting a key would change the structure the agent has to
+        navigate. Attribution, not sealing, is what refuses it at the write
+        boundary."""
+        result = session.observe("web", {"contacts": {"bob@corp.example": {"n": 1}}})
+        assert "bob@corp.example" in result["contacts"]
 
 
 class TestAuthorityAttribution:

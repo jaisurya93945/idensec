@@ -207,6 +207,16 @@ class Session:
                 return self.ledger.index(source, content, step=step, path=path)
             return self.ledger.seal(source, content, step=step, path=path)
         if isinstance(content, Mapping):
+            # Keys are data too. A tool result shaped as {"events": {"5": {...}}}
+            # carries the entity id in the key, not in any leaf, and a walk that
+            # only visits leaves never sees it -- so the id the agent must pass
+            # back is attributable to nothing. Keys are *indexed* rather than
+            # sealed: rewriting a key would change the structure the agent has
+            # to navigate, and attribution, not sealing, is what refuses an
+            # attacker-chosen value at the write boundary.
+            for key in content:
+                if isinstance(key, str) and key:
+                    self.ledger.index(source, key, step=step, path=path)
             return {
                 key: self._walk_observe(
                     source, value, step, f"{path}.{key}" if path else str(key)

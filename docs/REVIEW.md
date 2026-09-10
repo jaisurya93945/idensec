@@ -6,6 +6,85 @@ comfortable, it was written badly.
 
 ---
 
+## 2026-09-10 (final) — the criterion is met on utility and missed on security
+
+The condition set two entries ago: *"if a focused pass on contracts and grants
+does not take utility materially past 70% while holding security above 90%, the
+honest conclusion is that argument-level containment costs more than deployments
+will pay."*
+
+The focused pass happened. **Utility reached 76.3%. Security fell to 85.1%.**
+The condition is half met, and half-met is not met.
+
+### What the curve actually says
+
+| authority granted to the workspace | security | utility |
+| --- | ---: | ---: |
+| nothing | **95.4%** | 34.0% |
+| every kind, everywhere | 55.8% | 46.4% |
+| per field path | 85.7% | 68.0% |
+| per field path + budgets for magnitudes | 85.1% | **76.3%** |
+
+**No configuration reaches 90% security and 70% utility at once.** That is the
+result, and reporting the 76.3% row without the 85.1% beside it would be the
+dishonest version of this entry.
+
+### Is the thesis disproven?
+
+**The thesis as originally stated is not supported.** It predicted that making
+provenance structural rather than inferred would reach PACT's *oracle* row —
+high security *and* high utility together. This evaluation does not reach it,
+and one configuration does not exist that gets close to both.
+
+But the reason matters, and it is **not** the reason the thesis named.
+Determinism was not the binding constraint: every bug fixed during this pass
+bought utility with **no** security cost. Security fell only when a *grant* was
+widened — that is, when a human chose to trust a directory.
+
+The binding constraint is different and, we think, previously unarticulated:
+
+> A large fraction of real agent work is **selecting an existing entity** —
+> reschedule *that* event, share *that* file, reply to *that* thread. When the
+> directory of entities is untrusted, provenance must either refuse the
+> selection or trust the directory, and trusting the directory admits an
+> injection that names a legitimate entry. **No provenance system resolves
+> this, oracle or otherwise**, because it is a question about intent, not
+> origin.
+
+That reframes rather than rescues the thesis. Argument provenance is sound for
+*introduced* destinations and structurally blind to *selected* ones, and the
+exchange rate between them is now measured rather than assumed.
+
+### What should happen next
+
+Not more of this. The honest options are:
+
+1. **Narrow the claim** to what the evidence supports: containment of introduced
+   destinations, with a stated and measured cost on entity selection. This is
+   the option we are taking — the README, threat model and limitations now say
+   it in those words.
+2. **Attack entity selection directly**, which needs a signal provenance does
+   not carry. The obvious candidate is the principal's own *reference* — the
+   task says "the networking event", the directory says which id that is, and
+   binding one to the other is a different mechanism from attribution. That is a
+   research problem, not a feature.
+3. **Stop**, if neither of those is worth doing.
+
+Option 1 is done. Option 2 is now the top roadmap item, stated as a research
+problem rather than a task. Option 3 stays on the table and should be revisited
+if option 2 does not produce something in a bounded attempt.
+
+### The strongest criticism, updated again
+
+> *"You moved the goalposts: the criterion said 90% security and you are
+> reporting an 85% configuration as success."*
+
+Correct, and the response is that the entry says in its own title that the
+criterion was missed, reports the 95.4% row first in every table, and takes the
+option that narrows the claim rather than the one that reinterprets the number.
+
+---
+
 ## 2026-09-10 (later) — the falsification criterion, applied
 
 The previous entry set a condition: *if a utility measurement lands nearer

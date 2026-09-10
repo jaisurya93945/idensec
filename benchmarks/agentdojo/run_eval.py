@@ -29,6 +29,11 @@ is the knob:
   *structured* fields that carry them (``sender``, ``recipients``,
   ``participants``, contact records) and for nothing in free-text fields
   (``body``, ``description``, ``content``), which is where injections live.
+* ``recommended`` -- ``scoped``, plus the documented treatment of *computed*
+  magnitudes: an amount is content, and a budget bounds it. Agents legitimately
+  compute amounts ("prices rose 10%, send the difference"), arithmetic is a
+  semantic derivation quotation cannot follow, and a budget is a control
+  provenance cannot provide and does not need to.
 
 The third exists because the first two are both wrong, and measuring them
 side by side is what showed it: a per-source grant cannot separate a workspace's
@@ -45,7 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -55,8 +60,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from effects import effects_for  # noqa: E402
 
 from idensec import (  # noqa: E402
+    Budget,
     ContractRegistry,
+    Effect,
+    Meter,
+    ParameterContract,
     Policy,
+    Role,
     Session,
     Source,
     Trust,
@@ -89,12 +99,36 @@ class Tally:
         return self.passed / self.total if self.total else 0.0
 
 
-def build_contracts(suite) -> ContractRegistry:
+AMOUNT_NAMES = frozenset({"amount", "total", "price", "value", "quantity", "sum"})
+
+SPEND_BUDGETS = (
+    Budget(
+        "session_spend",
+        2000,
+        Meter.SUM,
+        parameter="amount",
+        effects=frozenset({Effect.FINANCIAL}),
+        description="what the whole session may move, whatever the agent computes",
+    ),
+)
+
+
+def build_contracts(suite, magnitudes_as_content: bool = False) -> ContractRegistry:
     """Draft a contract per tool from its own schema, then declare effects."""
     contracts = []
     for tool in suite.tools:
         schema = tool.parameters.model_json_schema()
         contract = derive_contract(tool.name, schema, effects=effects_for(tool.name))
+        if magnitudes_as_content:
+            parameters = {
+                name: (
+                    ParameterContract(name, Role.PAYLOAD)
+                    if name.lower() in AMOUNT_NAMES
+                    else spec
+                )
+                for name, spec in contract.parameters.items()
+            }
+            contract = replace(contract, parameters=parameters)
         contracts.append(contract)
     return ContractRegistry(contracts)
 
@@ -133,6 +167,13 @@ SCOPED_GRANTS = {
     ),
     "**.account_iban": frozenset({"iban"}),
     "**.filename": frozenset({"posix_path", UNCLASSIFIED}),
+    # Entity collections keyed by id. In these environments the id lives in the
+    # dict *key* -- calendar.events["5"] -- so it is the collection path, not a
+    # field, that has to carry the grant.
+    "**.events": frozenset({UNCLASSIFIED}),
+    "**.files": frozenset({UNCLASSIFIED}),
+    "**.emails": frozenset({UNCLASSIFIED}),
+    "**.accounts": frozenset({UNCLASSIFIED}),
     # Deliberately absent: slack channel names. In this benchmark the channel
     # list is itself an injection vector, so a source that names channels is
     # a source that names the attacker's channel.
@@ -140,13 +181,14 @@ SCOPED_GRANTS = {
 
 
 def make_session(contracts: ContractRegistry, labelling: str) -> Session:
+    scoped = labelling in ("scoped", "recommended")
     workspace = Source(
         WORKSPACE,
         Trust.TOOL_UNTRUSTED,
         authoritative_for=(
             frozenset(DEFAULT_KINDS) if labelling == "permissive" else frozenset()
         ),
-        authoritative_paths=SCOPED_GRANTS if labelling == "scoped" else {},
+        authoritative_paths=SCOPED_GRANTS if scoped else {},
         description="the agent's view of the user's SaaS environment",
     )
     return Session(
@@ -155,6 +197,7 @@ def make_session(contracts: ContractRegistry, labelling: str) -> Session:
         # decides about each call, not how long a session survives probing.
         policy=Policy(denial_budget=-1, min_quotation_length=MIN_QUOTATION),
         sources=[Source(PRINCIPAL, Trust.USER_INPUT), workspace],
+        budgets=SPEND_BUDGETS if labelling == "recommended" else (),
         max_observed_chars=64_000_000,
     )
 
@@ -173,7 +216,7 @@ def admit_all(session: Session, calls) -> tuple[bool, str]:
 
 
 def run_suite(name, suite, labelling: str, limit: int | None):
-    contracts = build_contracts(suite)
+    contracts = build_contracts(suite, magnitudes_as_content=labelling == "recommended")
     security = Tally()
     utility = Tally()
 
@@ -258,8 +301,9 @@ def main() -> int:
         "strict": "workspace authoritative for nothing",
         "permissive": "workspace authoritative for every kind, everywhere",
         "scoped": "workspace authoritative per field path",
+        "recommended": "scoped, plus computed magnitudes bounded by a budget",
     }
-    for label in ("strict", "permissive", "scoped"):
+    for label in ("strict", "permissive", "scoped", "recommended"):
         print(f"\n=== labelling: {label} ({descriptions[label]}) ===")
         print(f"{'suite':<12} {'security':>18} {'utility':>18}")
         print("-" * 52)
