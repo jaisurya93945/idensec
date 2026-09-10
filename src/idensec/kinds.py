@@ -21,6 +21,7 @@ alone is not a defence and the unattributed rule (ADR-0007) exists.
 
 from __future__ import annotations
 
+import bisect
 import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -249,7 +250,12 @@ def extract(text: str, kinds: Sequence[str] | None = None) -> list[Match]:
     """
     if not text:
         return []
-    claimed: list[tuple[int, int]] = []
+    # Claimed spans are kept sorted so that overlap resolution is a bisect
+    # rather than a scan. With a linear scan this loop is quadratic in the
+    # number of operands: invisible on a sentence, ruinous on a 64 KB page --
+    # which is exactly what a fetched document produces.
+    starts: list[int] = []
+    ends: list[int] = []
     found: list[Match] = []
     for kind in resolve_kinds(kinds):
         for m in kind.pattern.finditer(text):
@@ -261,9 +267,13 @@ def extract(text: str, kinds: Sequence[str] | None = None) -> list[Match]:
                 raw = stripped
             if not raw or not _plausible(kind.name, raw):
                 continue
-            if any(start < c_end and c_start < end for c_start, c_end in claimed):
+            index = bisect.bisect_right(starts, start)
+            if index and ends[index - 1] > start:
                 continue
-            claimed.append((start, end))
+            if index < len(starts) and starts[index] < end:
+                continue
+            starts.insert(index, start)
+            ends.insert(index, end)
             found.append(Match(kind=kind.name, value=raw, start=start, end=end))
     found.sort(key=lambda m: m.start)
     return found

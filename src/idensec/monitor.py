@@ -56,7 +56,14 @@ a silent bypass.
 
 
 class Session:
-    """One agent execution, mediated."""
+    """One agent execution, mediated.
+
+    ``max_observed_chars`` bounds how much content one session may take in.
+    Exceeding it raises rather than silently forgetting, because a ledger that
+    quietly drops observations stops being able to attribute what it forgot and
+    would therefore fail *open* on exactly those values. A long-running agent
+    should start a new session rather than raise this without thought.
+    """
 
     def __init__(
         self,
@@ -67,6 +74,7 @@ class Session:
         kinds: Sequence[str] | None = None,
         id_factory: Any | None = None,
         session_id: str = "",
+        max_observed_chars: int = 4_000_000,
     ) -> None:
         self.session_id = session_id
         self.policy = policy
@@ -77,7 +85,11 @@ class Session:
         )
         self._kinds = tuple(kinds) if kinds is not None else DEFAULT_KINDS
         self._sources: dict[str, Source] = {}
-        self.ledger = OperandLedger(kinds=self._kinds, id_factory=id_factory)
+        self.ledger = OperandLedger(
+            kinds=self._kinds,
+            id_factory=id_factory,
+            max_indexed_chars=max_observed_chars,
+        )
         self.ledger.bind_source_lookup(self._source_labels)
         self.audit = AuditChain()
         self._step = 0

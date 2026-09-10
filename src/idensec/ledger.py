@@ -102,13 +102,21 @@ class Operand:
 
 @dataclass(frozen=True, slots=True)
 class Observation:
-    """One piece of content that entered the agent's context."""
+    """One piece of content that entered the agent's context.
+
+    ``normalised`` is the whitespace-collapsed, case-folded form used for
+    derivation matching. It is computed once here rather than on every
+    attribution: recomputing it per lookup made ``admit`` scale with the total
+    *size* of everything observed rather than with its length, which showed up
+    immediately in the benchmark.
+    """
 
     step: int
     source_id: str
     path: str
     text: str
     sealed: bool
+    normalised: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,7 +275,14 @@ class OperandLedger:
             )
         self._indexed_chars += len(text)
         self._observations.append(
-            Observation(step=step, source_id=source.id, path=path, text=text, sealed=sealed)
+            Observation(
+                step=step,
+                source_id=source.id,
+                path=path,
+                text=text,
+                sealed=sealed,
+                normalised=" ".join(text.split()).casefold(),
+            )
         )
 
     # -- resolution ------------------------------------------------------
@@ -339,8 +354,7 @@ class OperandLedger:
         for observation in self._observations:
             if observation.source_id not in wanted:
                 continue
-            haystack = " ".join(observation.text.split()).casefold()
-            if _contains_token(haystack, needle):
+            if _contains_token(observation.normalised, needle):
                 return Origin(
                     source_id=observation.source_id,
                     trust=self._trust_of(observation),
