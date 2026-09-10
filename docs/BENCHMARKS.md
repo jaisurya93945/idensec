@@ -134,6 +134,52 @@ Together these took `admit` after 1 000 observations from 4.85 ms to 2.70 ms
 
 ---
 
+## Extraction coverage (2026-09-10)
+
+Coverage is a security parameter, not a quality metric, and it was unmeasured
+until now. Run it with:
+
+```
+python3 benchmarks/extraction_coverage.py
+```
+
+Against a **synthetic** corpus of 43 authority-bearing values in realistic
+surface forms, plus 16 prose samples containing none:
+
+| kind set | recall | correct kind | false-positive samples |
+| --- | ---: | ---: | ---: |
+| `DEFAULT_KINDS` (13 kinds) | 40/43 · **93%** | 40/43 | **0/16** |
+| every registered kind (+`ipv4`) | 42/43 · 97% | 42/43 | 2/16 |
+
+The first measurement, before this study changed anything, was **69%**. The
+gaps it found were all real: home-relative and parent-relative paths
+(`~/.ssh/id_ed25519`, `../../etc/shadow` — a traversal is an authority
+decision), UNC paths, non-HTTP URI schemes (`s3://`, `postgres://`), scp-style
+git remotes, EVM wallet addresses, AWS ARNs and IPv4 literals. Six new kinds and
+three broadened patterns closed all but one.
+
+**The one deliberate omission.** `ipv4` is registered but excluded from the
+defaults. Four dotted decimals are genuinely ambiguous with version strings and
+no deterministic rule separates `1.2.3.4` the address from `1.2.3.4` the
+release. The asymmetry settles it: a missed seal is **not a bypass** — an
+unsealed untrusted value still matches its source observation at the write
+boundary and is refused by the unattributed rule — whereas a false positive
+mangles every version number the agent reads. Deployments whose tools take
+addresses enable it explicitly, and the table above prices that choice rather
+than arguing about it.
+
+**The one unclosed gap:** paths containing spaces (`/srv/docs/q3 report.pdf`).
+Extending a path pattern across whitespace would swallow surrounding prose,
+which costs the readability that makes sealing usable at all. Recorded as a
+known miss rather than papered over.
+
+**Limitation, stated plainly:** the corpus is synthetic — hand-written from our
+own idea of what tool output looks like. These figures describe our patterns
+against our own expectations, not against production MCP traffic. A study
+against real traffic remains owed, and is listed below.
+
+---
+
 ## Method notes
 
 - One untimed warm-up call per measurement, so lazily compiled regexes and
@@ -152,8 +198,9 @@ Together these took `admit` after 1 000 observations from 4.85 ms to 2.70 ms
 2. **Security under a real model** — the adversarial suite proves the monitor;
    it does not prove that a real agent plus the monitor resists a real attack
    suite end to end.
-3. **Extraction coverage against real tool output** — what fraction of
-   authority-bearing values in real MCP responses are recognised. Directly a
-   security parameter (U03 in the threat model), currently unmeasured.
+3. **Extraction coverage against *real* tool output.** The synthetic study
+   above is a floor, not a substitute: it measures our patterns against our own
+   idea of the world. What fraction of authority-bearing values in real MCP
+   responses are recognised is still unmeasured.
 4. **Contract derivation precision/recall** — how often `derive_contract()`
    drafts the right role for a real schema.

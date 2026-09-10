@@ -143,10 +143,28 @@ def register_kind(kind: OperandKind) -> OperandKind:
 for _k in (
     _kind(
         "url",
-        r"\bhttps?://[^\s<>\"'`\\^{}|\[\]]+",
+        r"\b[a-z][a-z0-9+.\-]{1,15}://[^\s<>\"'`\\^{}|\[\]]+",
         10,
         strip_punctuation=True,
-        description="Absolute HTTP(S) URL. The canonical exfiltration sink.",
+        description="Absolute URL of any scheme. http(s) is the canonical "
+        "exfiltration sink, but s3://, postgres://, ssh:// and ftp:// name "
+        "resources just as authoritatively.",
+    ),
+    _kind(
+        "git_remote",
+        r"\b[a-z_][\w.\-]*@[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?"
+        r"(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,63}:[\w./\-~]+",
+        15,
+        description="scp-style remote such as git@github.com:acme/repo.git. "
+        "Claimed before email so the repository half is sealed too -- sealing "
+        "only the host would leave the attacker free to choose the repo.",
+    ),
+    _kind(
+        "arn",
+        r"\barn:[a-z0-9][a-z0-9\-]*:[a-z0-9\-]*:[a-z0-9\-]*:[^\s\"'<>,]*",
+        18,
+        description="AWS ARN. Names a cloud resource, which is authority in "
+        "exactly the sense that matters.",
     ),
     _kind(
         "email",
@@ -154,6 +172,14 @@ for _k in (
         r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?)*\.[A-Za-z]{2,63}\b",
         20,
         description="Mail address.",
+    ),
+    _kind(
+        "unc_path",
+        r"\\\\[A-Za-z0-9._\-]+\\[^\s\"'<>|]*",
+        22,
+        case_sensitive=True,
+        description="Windows UNC network path such as \\\\fileserver\\share. "
+        "Names a host as well as a path.",
     ),
     _kind(
         "windows_path",
@@ -164,10 +190,12 @@ for _k in (
     ),
     _kind(
         "posix_path",
-        r"(?<![\w./~\-])/(?:[A-Za-z_.][\w.\-+@%]*)(?:/[\w.\-+@%]*)*",
+        r"(?<![\w./~\-])(?:~|\.{1,2})?/(?:[A-Za-z_.][\w.\-+@%]*)(?:/[\w.\-+@%]*)*",
         30,
         case_sensitive=True,
-        description="Absolute POSIX path.",
+        description="POSIX path: absolute, home-relative (~/...), or relative "
+        "(./... and ../...). Relative forms matter because '../../etc/shadow' "
+        "is a traversal, and a traversal is an authority decision.",
     ),
     _kind(
         "uuid",
@@ -183,6 +211,12 @@ for _k in (
         description="IBAN-shaped bank account identifier.",
     ),
     _kind(
+        "crypto_address",
+        r"\b0x[a-fA-F0-9]{40}\b",
+        46,
+        description="EVM-style wallet address. Irreversible destination.",
+    ),
+    _kind(
         "account_number",
         r"\b\d{8,19}\b",
         50,
@@ -196,6 +230,15 @@ for _k in (
         "runs are claimed by account_number first.",
     ),
     _kind(
+        "ipv4",
+        r"\b(?:\d{1,3}\.){3}\d{1,3}\b",
+        65,
+        description="IPv4 literal. NOT in DEFAULT_KINDS: four dotted decimals "
+        "are genuinely ambiguous with version strings, and no deterministic "
+        "rule separates 1.2.3.4 the address from 1.2.3.4 the release. Enable it "
+        "explicitly for deployments whose tools take addresses.",
+    ),
+    _kind(
         "hostname",
         r"\b(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}\b",
         70,
@@ -206,19 +249,33 @@ for _k in (
 
 DEFAULT_KINDS: tuple[str, ...] = (
     "url",
+    "git_remote",
+    "arn",
     "email",
+    "unc_path",
     "windows_path",
     "posix_path",
     "uuid",
     "iban",
+    "crypto_address",
     "account_number",
     "phone",
     "hostname",
 )
-"""Kinds extracted unless an integrator narrows the set.
+"""Kinds extracted unless an integrator changes the set.
 
-Chosen to fail toward over-extraction: a false positive costs readability, a
-false negative costs a seal.
+Chosen to fail toward over-extraction *where the surface form is unambiguous*:
+a false positive costs readability, a false negative costs a seal.
+
+``ipv4`` is registered but deliberately excluded. Its surface form collides with
+version strings, and the collision is not resolvable deterministically -- see
+its description. The asymmetry that settles it: a missed seal is not a bypass,
+because an unsealed untrusted value still matches its source observation at the
+write boundary and is refused by the unattributed rule. A false positive, by
+contrast, mangles every version number the agent reads. Enable it per
+deployment:
+
+    Session(kinds=(*DEFAULT_KINDS, "ipv4"), ...)
 """
 
 
@@ -230,6 +287,11 @@ def _plausible(kind: str, value: str) -> bool:
     if kind == "posix_path":
         # "/" alone or "/x" carry little authority and match too much prose.
         return value.count("/") >= 2 or len(value) >= 5
+    if kind == "ipv4":
+        # Range-check the octets so that "2.1.4.300" and most version strings
+        # are not mistaken for addresses.
+        octets = value.split(".")
+        return all(part.isdigit() and int(part) <= 255 for part in octets)
     return True
 
 

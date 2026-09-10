@@ -80,6 +80,74 @@ class TestExtraction:
         assert kinds_of(text) == [("email", "bob@corp.example")]
 
 
+class TestExtendedKinds:
+    """Kinds added after the coverage study measured a 69% recall floor."""
+
+    @pytest.mark.parametrize(
+        ("text", "kind", "value"),
+        [
+            ("Fetch s3://backups/q3.tar now", "url", "s3://backups/q3.tar"),
+            (
+                "DSN postgres://db.corp.example:5432/app",
+                "url",
+                "postgres://db.corp.example:5432/app",
+            ),
+            (
+                "Clone git@github.com:acme/repo.git",
+                "git_remote",
+                "git@github.com:acme/repo.git",
+            ),
+            ("Bucket arn:aws:s3:::corp-backups holds it", "arn", "arn:aws:s3:::corp-backups"),
+            (
+                "Mount \\\\fileserver\\share\\docs now",
+                "unc_path",
+                "\\\\fileserver\\share\\docs",
+            ),
+            ("Copy ~/.ssh/id_ed25519 over", "posix_path", "~/.ssh/id_ed25519"),
+            ("Edit ./config/settings.yml first", "posix_path", "./config/settings.yml"),
+            ("Traverse ../../etc/shadow upward", "posix_path", "../../etc/shadow"),
+            (
+                "Send to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e address",
+                "crypto_address",
+                "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+            ),
+        ],
+    )
+    def test_extended_forms_are_extracted(self, text: str, kind: str, value: str) -> None:
+        assert (kind, value) in kinds_of(text)
+
+    def test_git_remote_claims_the_repository_too(self) -> None:
+        """Sealing only the host would leave the repository attacker-chosen."""
+        found = dict(kinds_of("Clone git@github.com:acme/repo.git today"))
+        assert found.get("git_remote") == "git@github.com:acme/repo.git"
+        assert "email" not in found
+
+    def test_ipv4_is_not_extracted_by_default(self) -> None:
+        """Registered but opt-in: four dotted decimals are ambiguous with
+        version strings, and a missed seal is not a bypass."""
+        assert kinds_of("Connect to 192.168.1.10 now") == []
+
+    def test_ipv4_is_available_when_asked_for(self) -> None:
+        found = extract("Connect to 192.168.1.10 now", [*DEFAULT_KINDS, "ipv4"])
+        assert [(m.kind, m.value) for m in found] == [("ipv4", "192.168.1.10")]
+
+    def test_ipv4_octets_are_range_checked(self) -> None:
+        found = extract("Build 2.1.4.300 shipped", [*DEFAULT_KINDS, "ipv4"])
+        assert found == []
+
+    @pytest.mark.parametrize(
+        "prose",
+        [
+            "Upgrade from 1.2.3.4 to 1.2.4.0 before the freeze.",
+            "Choose and/or decide either way.",
+            "The ratio is 3/4 and the split was 60/40.",
+            "The C: drive and the D: drive were full.",
+        ],
+    )
+    def test_broadened_patterns_do_not_eat_prose(self, prose: str) -> None:
+        assert kinds_of(prose) == []
+
+
 class TestNormalisation:
     def test_addresses_fold_case(self) -> None:
         assert normalise("email", "BOB@Corp.Example") == "bob@corp.example"
@@ -108,8 +176,18 @@ class TestRegistry:
         assert len(resolve_kinds(DEFAULT_KINDS)) == len(DEFAULT_KINDS)
 
     def test_priority_ordering(self) -> None:
-        ordered = resolve_kinds()
-        assert [k.name for k in ordered][:2] == ["url", "email"]
+        """URL first, then the composite forms that *contain* an address, then
+        email. git_remote must outrank email: sealing only the host half of
+        git@github.com:acme/repo.git would leave the attacker free to choose
+        the repository."""
+        ordered = [k.name for k in resolve_kinds()]
+        assert ordered[0] == "url"
+        assert ordered.index("git_remote") < ordered.index("email")
+        assert ordered.index("unc_path") < ordered.index("windows_path")
+        # ipv4 is opt-in, so check its ordering against the whole registry:
+        # when enabled it must claim a literal before hostname sees it.
+        with_ipv4 = [k.name for k in resolve_kinds([*DEFAULT_KINDS, "ipv4"])]
+        assert with_ipv4.index("ipv4") < with_ipv4.index("hostname")
 
     def test_unknown_kind_raises(self) -> None:
         with pytest.raises(KeyError, match="unregistered"):

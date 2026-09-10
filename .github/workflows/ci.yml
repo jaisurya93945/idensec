@@ -71,6 +71,22 @@ jobs:
       - name: Benchmarks run
         run: python benchmarks/bench_monitor.py --quick
 
+      - name: Extraction coverage does not regress
+        # Coverage is a security parameter; a pattern change that silently
+        # drops recall should fail the build, not surface months later.
+        run: |
+          python benchmarks/extraction_coverage.py --json coverage.json
+          python - <<'PY'
+          import json, sys
+          data = json.load(open("coverage.json"))
+          floor = 0.90
+          if data["recall"] < floor:
+              sys.exit(f"extraction recall {data['recall']:.0%} below floor {floor:.0%}")
+          if data["false_positive_samples"] > 0:
+              sys.exit(f"{data['false_positive_samples']} false positives on prose")
+          print(f"recall {data['recall']:.0%}, no false positives")
+          PY
+
   signatures:
     runs-on: ubuntu-latest
     steps:

@@ -17,7 +17,8 @@ additional engineering makes the project more true.
 | --- | --- | --- |
 | `blocked` | **Utility measurement against AgentDojo** — task success with and without the monitor, per policy preset. | The decisive number ([`LIMITATIONS.md`](LIMITATIONS.md) §2). Blocked on model API access, not on design. |
 | `blocked` | **Re-verify the literature against primary sources.** | Every comparative claim is currently `INFERENCE` from search summaries. Nothing comparative should be published outside this repository until this is done ([`RESEARCH.md`](RESEARCH.md)). |
-| `next` | **Extraction coverage study** against real MCP tool output. | Coverage is a security parameter (threat model U03) and is unmeasured. A miss here is a silent bypass. |
+| `done` | **Extraction coverage study** (synthetic corpus) | 69% → 93% recall at zero false positives; six new kinds, three broadened patterns. Priced the `ipv4` trade-off rather than guessing it. [`BENCHMARKS.md`](BENCHMARKS.md). |
+| `next` | **Coverage against *real* MCP traffic** | The synthetic corpus measures our patterns against our own expectations. Real tool output is the actual question. |
 | `next` | **Contract derivation precision/recall** against a corpus of real JSON Schemas. | Decides whether the answer to policy sprawl actually works. |
 
 ## Next: make it deployable

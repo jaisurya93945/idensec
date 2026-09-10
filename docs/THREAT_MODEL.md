@@ -215,8 +215,15 @@ quotation of the principal and is allowed. *Mitigation available today:* set
 
 An authority-bearing value whose kind is not registered is never sealed. Custom
 identifiers — tenant ids, cluster names, internal ticket formats — must be
-registered via `register_kind()`. Coverage is a security parameter, and its
-adequacy against real-world tool output is **unmeasured**.
+registered via `register_kind()`.
+
+Now **measured** against a synthetic corpus: 93% recall with zero false
+positives on the default kind set, up from 69% before the study
+([`BENCHMARKS.md`](BENCHMARKS.md)). Still listed as unmitigated for two honest
+reasons: the corpus is our own, so it measures our patterns against our own
+expectations rather than production traffic; and a miss is a real weakening of
+defence in depth even though it is not a bypass — an unsealed untrusted value
+still fails attribution at the write boundary.
 
 ### U04 · Aggregate harm
 
