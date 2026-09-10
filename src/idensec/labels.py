@@ -21,7 +21,7 @@ so that labels are comparable with published work.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum
 
@@ -71,6 +71,84 @@ class Sensitivity(IntEnum):
     CONFIDENTIAL = 2
 
 
+def _split_path(path: str) -> list[str]:
+    """Break ``inbox.emails[3].sender`` into its segments.
+
+    List indices become segments of their own so that ``*`` can stand for one.
+    """
+    segments: list[str] = []
+    current = ""
+    for char in path:
+        if char == ".":
+            if current:
+                segments.append(current)
+            current = ""
+        elif char == "[":
+            if current:
+                segments.append(current)
+            current = "["
+        elif char == "]":
+            segments.append(current + "]")
+            current = ""
+        else:
+            current += char
+    if current:
+        segments.append(current)
+    return segments
+
+
+def _glob_segments(pattern: list[str], path: list[str]) -> bool:
+    """Match path segments against a pattern, honouring ``*`` and ``**``."""
+    if not pattern:
+        return True  # a consumed pattern is a prefix match
+    head, rest = pattern[0], pattern[1:]
+    if head == "**":
+        if not rest:
+            return True
+        return any(_glob_segments(rest, path[i:]) for i in range(len(path) + 1))
+    if not path:
+        return False
+    if head == "[*]":
+        # An index wildcard, so that "**.participants[*]" reads naturally.
+        if not path[0].startswith("["):
+            return False
+    elif head not in ("*", path[0]):
+        return False
+    return _glob_segments(rest, path[1:])
+
+
+def _path_covers(pattern: str, path: str) -> bool:
+    """True when a grant pattern applies to a value observed at ``path``.
+
+    Without wildcards the pattern is a prefix, and continuation must fall on a
+    separator so that ``inbox.contacts`` never leaks to ``inbox.contacts_backup``.
+    """
+    if not pattern:
+        return True
+    if "*" not in pattern:
+        return path == pattern or (
+            path.startswith(pattern) and path[len(pattern)] in ".["
+        )
+    return _glob_segments(_split_path(pattern), _split_path(path))
+
+
+def _as_path_grants(value: object) -> tuple[tuple[str, frozenset[str]], ...]:
+    if isinstance(value, tuple) and all(isinstance(item, tuple) for item in value):
+        return tuple(
+            (str(prefix), _as_frozenset(kinds)) for prefix, kinds in value
+        )
+    if isinstance(value, Mapping):
+        return tuple(
+            sorted(
+                ((str(prefix), _as_frozenset(kinds)) for prefix, kinds in value.items()),
+                key=lambda item: item[0],
+            )
+        )
+    raise TypeError(
+        "authoritative_paths must map a field-path prefix to a set of operand kinds"
+    )
+
+
 def _as_frozenset(value: object) -> frozenset[str]:
     if isinstance(value, frozenset):
         return value
@@ -95,6 +173,37 @@ class Source:
     trust: Trust
     sensitivity: Sensitivity = Sensitivity.PUBLIC
     authoritative_for: frozenset[str] = field(default_factory=frozenset)
+    authoritative_paths: tuple[tuple[str, frozenset[str]], ...] = ()
+    """Authority granted only under particular field paths.
+
+    A real tool result is not uniformly trustworthy. A workspace API returns
+    contact records *and* the bodies of emails other people sent; the first is
+    the principal's own directory, the second is attacker territory, and both
+    arrive from one source. Granting ``email`` authority to the source as a
+    whole makes every address in every message body authoritative, which is the
+    injection path. Granting none of it denies the legitimate lookups.
+
+    Measured against AgentDojo, that choice cost either a third of the security
+    or a quarter of the utility -- so it is the wrong choice to have to make.
+    Because provenance is recorded per field, authority can be scoped the same
+    way:
+
+        Source("workspace", Trust.TOOL_TRUSTED,
+               authoritative_paths={"inbox.contacts": {"email"},
+                                    "calendar.events": {"email"}})
+
+    A pattern without wildcards is a prefix: ``inbox.contacts`` covers
+    ``inbox.contacts[3].email`` and never ``inbox.contacts_backup``, because
+    continuation must fall on a separator.
+
+    Patterns may also use segment wildcards, which is what real API shapes
+    need. ``*`` matches one path segment and ``**`` matches any number, so
+    ``**.sender`` grants authority to the sender field of every record while
+    leaving ``**.body`` alone. Measured against AgentDojo, that distinction is
+    the whole game: legitimate addresses live in ``sender``, ``recipients`` and
+    ``participants``, and injections live in ``description`` and ``content``.
+    """
+
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -103,15 +212,28 @@ class Source:
         # Callers reasonably pass a set or list literal; normalise so that
         # equality and hashing behave.
         object.__setattr__(self, "authoritative_for", _as_frozenset(self.authoritative_for))
+        object.__setattr__(
+            self, "authoritative_paths", _as_path_grants(self.authoritative_paths)
+        )
 
     @property
     def is_principal(self) -> bool:
         """True when the source speaks for the principal or the operator."""
         return self.trust >= Trust.USER_INPUT
 
-    def is_authoritative_for(self, kind: str) -> bool:
-        """Whether this source may supply a value of ``kind`` that carries authority."""
-        return self.is_principal or kind in self.authoritative_for
+    def is_authoritative_for(self, kind: str, path: str = "") -> bool:
+        """Whether this source may supply a value of ``kind`` carrying authority.
+
+        ``path`` is where the value sat inside the source's output. A source
+        with no path-scoped grants ignores it entirely, so the simple case stays
+        simple.
+        """
+        if self.is_principal or kind in self.authoritative_for:
+            return True
+        return any(
+            kind in kinds and _path_covers(prefix, path)
+            for prefix, kinds in self.authoritative_paths
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +287,10 @@ class Attribution:
     def is_authorised_for(self, kind: str, sources: dict[str, Source]) -> bool:
         """Existential authority check (ADR-0008).
 
+        Each origin is checked against the source's grants *at that origin's
+        field path*, so a source may be authoritative for addresses in its
+        contact records and not in the bodies of messages other people wrote.
+
         Unattributed values are never authorised, regardless of how harmless
         they look.
         """
@@ -172,7 +298,7 @@ class Attribution:
             return False
         for origin in self.origins:
             source = sources.get(origin.source_id)
-            if source is not None and source.is_authoritative_for(kind):
+            if source is not None and source.is_authoritative_for(kind, origin.path):
                 return True
         return False
 

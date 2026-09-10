@@ -437,6 +437,57 @@ trade; recorded instead.
 
 ---
 
+## Thread 3e — AgentDojo evaluation (2026-09-10)
+
+`EXPERIMENT` — Evaluated IDENSEC against AgentDojo, model-free, by replaying
+published ground truth in both directions: the injection tasks' attacker calls
+(security) and the user tasks' correct calls (utility). 97 user tasks, 609
+in-scope security cases, four suites. Method and the artefacts we had to author:
+[`benchmarks/agentdojo/README.md`](../benchmarks/agentdojo/README.md).
+
+`RESULT` — **Security 560/609 (92.0%), utility 50/97 (51.5%)**, under the best
+labelling we could write, with the model assumed to be *always* hijacked.
+
+`RESULT` — **Source labelling is the dominant variable, and per-source grants
+are the wrong shape.** Authoritative-for-nothing gave 95.4%/28.9%;
+authoritative-for-everything gave 68.6%/39.2% — worse on *both* axes.
+Path-scoped grants gave 92.0%/51.5%. The cause is structural: legitimate
+addresses live in `sender`/`recipients`/`participants` while every injection
+lives in `description`/`content`/`reviews`, and both arrive from one source.
+This produced a new capability (`Source.authoritative_paths`) rather than a
+tuning; the travel suite went 0% → 100% utility on it.
+
+`RESULT` — **Every escape is explained, and all fall into limitations documented
+before the measurement existed.** 20 where the attacker selects a legitimate
+directory entry (U01), 20 where the target call has no authority-bearing
+argument at all (U05), 8 low-entropy token collisions (U02), 20 speech-only
+tasks excluded as outside what an action monitor can address.
+
+`INFERENCE` — The boundary statement this yields is the most useful output of
+the whole exercise: **IDENSEC contains attacks that introduce a new destination;
+it does not contain attacks that merely select among legitimate ones, nor
+attacks whose target call carries no authority-bearing argument.**
+
+`RESULT` — Four real defects found and fixed: `recipient` constrained to
+`email` (breaking every IBAN transfer), `url` constrained to `url` (breaking
+every scheme-less fetch), temporal parameters treated as authority-bearing (the
+single largest source of false denials), and `*_id` constrained to the `uuid`
+kind. Utility went 22.7% → 51.5% with no security loss.
+
+`RESULT` (**uncomfortable, recorded as such**) — 51.5% is nearer PACT's
+*deployed* row (38–46%) than its *oracle* row. By the falsification criterion
+this project set for itself in [`REVIEW.md`](REVIEW.md), that is closer to
+disproof than to confirmation. The thesis is **not yet disproven** — the number
+moved 29 points in one sitting under obvious fixes and has not converged — but
+it is now the only thing on the roadmap that matters, and leaving it at 51.5%
+while building features would be the dishonest outcome.
+
+`FACT` — Effect classes and scoped grants were hand-authored per API by people
+who do not own those APIs. That is the policy-sprawl objection this project
+claims to answer, and one afternoon for four APIs does not answer it.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

@@ -6,6 +6,61 @@ comfortable, it was written badly.
 
 ---
 
+## 2026-09-10 (later) — the falsification criterion, applied
+
+The previous entry set a condition: *if a utility measurement lands nearer
+38–46% than 90%+, the thesis is wrong, determinism was not the binding
+constraint, and this joins the pile of correct unadopted defences.*
+
+**The measurement now exists: 51.5% utility at 92.0% security on AgentDojo.**
+That is nearer the failing range than the passing one.
+
+### Is the thesis disproven?
+
+**Not yet, and it is closer to disproof than to confirmation.** Stating it that
+way rather than either "vindicated" or "dead" is the only defensible reading,
+and the reasons are specific:
+
+- The number is a **lower bound** — ground-truth calls, not model behaviour.
+- It moved from **22.7% to 51.5% in one sitting**, purely by fixing two deriver
+  bugs and adding field-scoped authority grants. A number still moving that fast
+  under obvious fixes has not converged, and treating an unconverged number as a
+  verdict would be as dishonest as ignoring it.
+- One suite's 9.5% is an environment where the directory *is* the injection
+  vector, which source labelling cannot express at all.
+
+### What would settle it
+
+Raise it with better contracts and grants, or record the disproof. Concretely:
+if a focused pass on contracts and grants does not take utility materially past
+70% while holding security above 90%, the honest conclusion is that
+argument-level containment costs more than deployments will pay, and
+[`RESEARCH.md`](RESEARCH.md) should say so as a `RESULT`, not as a caveat.
+
+**The failure mode to avoid is obvious and tempting: leaving 51.5% in a table
+while building the next feature.** Nothing else on the roadmap matters more than
+this number.
+
+### What did we learn from the measurement itself?
+
+That the evaluation was more valuable than any feature built for it. It
+produced: a new capability (path-scoped authority, from watching per-source
+grants fail on both axes), four real bug fixes, a crisp statement of what the
+technique does and does not contain, and the first honest picture of what this
+costs to set up. Every one of those came from contact with somebody else's
+benchmark rather than from our own tests.
+
+### The strongest criticism, updated
+
+> *"You measured your own contracts against somebody else's benchmark, hand-tuned
+> the contracts until the number improved, and reported the improved number."*
+
+Fair, and the mitigation is that every artefact we authored is named in
+`benchmarks/agentdojo/README.md`, the tuning is described rather than hidden,
+and the pre-tuning number (22.7%) is reported alongside the post-tuning one.
+
+---
+
 ## 2026-09-10 — after the first deployable milestone
 
 Shipped since Phase 0: the provenance core, contracts, policy, audit, an MCP

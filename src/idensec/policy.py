@@ -104,6 +104,22 @@ class Policy:
     genuinely present.
     """
 
+    min_quotation_length: int = 1
+    """How many characters a value must have before quoting it counts as evidence.
+
+    Attribution accepts a value that appears as a whole token in the
+    principal's instruction. For short, low-entropy values that is weak
+    evidence, and it is measurably exploitable: in AgentDojo, a prompt reading
+    "what are we doing on June 13" authorises deleting the file whose id is
+    ``13``, because ``13`` really is a token the principal wrote. Provenance
+    cannot tell a date from a file id -- that is intent, not origin.
+
+    Raising this demands stronger quotation. It is not free: legitimate short
+    values, an amount of ``50`` among them, stop being derivable and are denied
+    or escalated with everything else. ``docs/BENCHMARKS.md`` prices both
+    settings against AgentDojo rather than guessing.
+    """
+
     denial_budget: int = 3
     """Denials tolerated before the session halts.
 

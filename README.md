@@ -22,11 +22,12 @@ session.admit("send_email", {"to": "ana@corp.example",  ...}).verdict    # ALLOW
 No model in the decision path. No network calls. No runtime dependencies. The
 same trace always produces the same verdict.
 
-> **Status: 0.1, early and unreviewed.** The security property is tested against
-> 49 attacks plus 19 end-to-end proxy tests; the *utility* cost has not been
-> measured, and that is the number that decides whether this approach is worth
-> anything.
-> [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) is not a formality — read it.
+> **Status: 0.1, early and unreviewed.** Measured against AgentDojo with no
+> model in the loop: **92.0% security** (assuming the model is *always*
+> hijacked) at **51.5% utility**. That utility number is below what this
+> project's own thesis predicts, and
+> [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) §2 says so plainly rather than
+> burying it. Read that before anything else here.
 
 ---
 
@@ -227,9 +228,33 @@ that are yours to get right, is in
 
 ## Measured
 
-`admit()` is **sub-millisecond** at typical session length. Full method, the
-run-to-run spread, the scaling weakness, and the two performance bugs that
-benchmarking found are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+Everything below is reproducible from this repository; method, caveats and the
+bugs each measurement found are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+
+**Against AgentDojo** — 97 user tasks, 609 in-scope security cases, no model
+involved. Security assumes the model is *always* hijacked, which is harsher than
+AgentDojo's own metric. Utility replays the ground-truth calls a *correct* agent
+would make, and is therefore a lower bound.
+
+| labelling | security | utility |
+| --- | ---: | ---: |
+| workspace authoritative for nothing | 95.4% | 28.9% |
+| authoritative for everything | 68.6% | 39.2% |
+| **authoritative per field path** | **92.0%** | **51.5%** |
+
+Every one of the 49 escapes is traced to a cause, and all of them fall into
+limitations documented *before* the measurement existed. The boundary it draws:
+
+> IDENSEC contains attacks that **introduce a new destination**. It does not
+> contain attacks that merely **select among legitimate ones**, nor attacks
+> whose target call has **no authority-bearing argument** at all.
+
+**51.5% is below what this project's thesis predicts,** and closer to the range
+at which [`docs/REVIEW.md`](docs/REVIEW.md) said the thesis should be considered
+wrong. It moved from 22.7% to 51.5% in one sitting on contract fixes, so it has
+not converged — but raising it is now the only thing on the roadmap that matters.
+
+**Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```
 admit allow (3 args, 1 KB payload)      p50 0.092 ms    p99 0.156 ms
@@ -237,9 +262,9 @@ admit deny  (injected destination)      p50 0.073 ms    p99 0.136 ms
 observe untrusted page (8 KB)           p50 6.84  ms    p99 14.3  ms
 ```
 
-**Not measured: task utility under enforcement.** It requires model API access
-we do not have, it is the number that would confirm or refute the whole thesis,
-and until it exists IDENSEC makes no utility claim.
+**Extraction coverage** 93% recall at zero false positives (synthetic corpus).
+**Contract derivation** 100% authority recall, zero dangerous misses (25
+hand-labelled schemas).
 
 ---
 

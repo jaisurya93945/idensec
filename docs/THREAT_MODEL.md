@@ -221,7 +221,18 @@ gap explicitly).
 
 These are listed because they are real, not because we intend to leave them.
 
-### U01 · Intent (negation blindness)
+### U01 · Intent (negation blindness) — quantified
+
+**Measured on AgentDojo: 28 of 49 security escapes.** 20 where the attacker
+*selects* a legitimate directory entry rather than supplying a new one — a
+poisoned review recommends a hotel that really is in the hotel list, and
+provenance cannot distinguish "the hotel the principal wanted" from "the hotel
+a review named". 8 where a low-entropy token in the principal's own prompt
+collides with the attacker's target: *"what are we doing on June 13"*
+authorises `delete_file(id="13")`. `Policy.min_quotation_length` addresses the
+second class at zero measured utility cost; nothing addresses the first.
+
+
 
 Provenance answers *who wrote this value*, not *what they meant by it*. An
 address the principal named **in order to forbid it** is still an address the
@@ -276,7 +287,15 @@ never going to succeed; repeating a destination costs nothing against a
 distinct-count limit; the agent is told nothing about the limit, since a budget
 it can read is a budget it can plan around.
 
-### U05 · Non-identifier authority
+### U05 · Non-identifier authority — quantified
+
+**Measured on AgentDojo: 20 of 49 security escapes**, all
+`create_calendar_event(title, start_time, end_time, description)` — a call whose
+every argument is content or a timestamp, so there is nothing to attribute. The
+linter flags such a contract (`no-authority-parameter` on a writing tool), so it
+is detectable in advance. It is not preventable by provenance.
+
+
 
 Authority carried by free prose — a natural-language command to a tool that
 interprets text — is outside what sealing can protect. Such a parameter should

@@ -23,7 +23,7 @@ from .audit import AuditChain, AuditRecord
 from .budget import Budget, BudgetLedger
 from .contracts import ContractRegistry, Effect, ParameterContract, Role, ToolContract
 from .decision import Decision, Finding, FindingCode, Verdict
-from .kinds import DEFAULT_KINDS, classify, extract
+from .kinds import DEFAULT_KINDS, UNCLASSIFIED, classify, extract
 from .labels import (
     Attribution,
     AttributionState,
@@ -95,6 +95,7 @@ class Session:
             kinds=self._kinds,
             id_factory=id_factory,
             max_indexed_chars=max_observed_chars,
+            min_derivation_length=policy.min_quotation_length,
         )
         self.ledger.bind_source_lookup(self._source_labels)
         self.audit = AuditChain()
@@ -429,7 +430,10 @@ class Session:
                 )
             )
 
-        if parameter.kinds:
+        if parameter.kinds and not (
+            UNCLASSIFIED in parameter.kinds
+            and not any(m.kind in parameter.kinds for m in operands)
+        ):
             if not any(m.kind in parameter.kinds for m in operands):
                 findings.append(
                     Finding(
@@ -443,10 +447,14 @@ class Session:
                 )
             return findings, attributions
 
-        # No declared kinds: the whole leaf must stand up.
+        # Either no kinds were declared, or UNCLASSIFIED was among them and the
+        # value carries no recognised operand. Both mean the same thing: the
+        # whole value has to stand up on its own. This is the fail-closed path,
+        # and declaring UNCLASSIFIED opts into it rather than out of anything.
+
         whole = self._attribute_whole(text, resolution)
         attributions.append(whole)
-        kind = classify(text, self._kinds) or ""
+        kind = classify(text, self._kinds) or UNCLASSIFIED
         findings.extend(self._authority_findings(label, parameter, kind, whole, text))
         return findings, attributions
 
@@ -478,7 +486,7 @@ class Session:
                     value=value,
                     detail=(
                         "no contributing source is authoritative for "
-                        f"{kind or 'this value'}: "
+                        f"{kind}: "
                         + ", ".join(o.locator() for o in attribution.origins)
                     ),
                     attribution=attribution,

@@ -21,23 +21,48 @@ attacks, does not verify identity, and does not know what the principal meant.
 
 ---
 
-## 2. Unproven: the utility cost
+## 2. Measured, and not yet good enough: the utility cost
 
-**This is the most important limitation and the one most likely to sink the
-thesis.**
+**This was listed here as the most important unknown. It is now measured, and
+the result is uncomfortable.**
 
-The design denies authority values it cannot attribute. Some of those denials
-are correct (an injected recipient). Some are not (an agent legitimately
-choosing a new file path, or computing an amount). We do not know the ratio.
+Against AgentDojo — 97 user tasks, 609 in-scope security cases, no model
+involved — with the best labelling we could write:
 
-- We have not measured task success under enforcement.
-- We have not run AgentDojo, ContainmentBench, or any model-in-the-loop suite.
-- Model API access is unavailable in the environment this was built in.
+| | |
+| --- | ---: |
+| Security (assuming the model is *always* hijacked) | 560/609 · **92.0%** |
+| Utility (a correct agent's ground-truth calls admitted) | 50/97 · **51.5%** |
 
-**IDENSEC therefore makes no utility claim.** The thesis in
-[`RESEARCH.md`](RESEARCH.md) predicts near-oracle utility. If measurement lands
-nearer PACT's *deployed* row (38–46%) than its *oracle* row, the thesis is wrong
-and this document is where that will be recorded first.
+Full method, per-suite breakdown and cause analysis in
+[`BENCHMARKS.md`](BENCHMARKS.md).
+
+**Against this project's own falsification criterion, that is closer to failure
+than to success.** [`REVIEW.md`](REVIEW.md) stated it before the number existed:
+the thesis predicts near-oracle utility, and *"if a utility measurement lands
+nearer 38–46% than 90%+, the thesis is wrong, determinism was not the binding
+constraint"*. 51.5% is nearer the first.
+
+Four things are true about that number, and none of them is a reason to dismiss
+it:
+
+1. **It is a lower bound.** Ground-truth calls are not model behaviour, and a
+   real agent reads before it writes — read paths are admitted far more often
+   than write paths.
+2. **Slack's 9.5% is not a monitor failure.** In that suite the channel
+   directory and web-content store are themselves injection vectors, so no field
+   grant is safe. That environment is outside what source labelling can express.
+3. **Most remaining refusals were contract quality, not the monitor.** Fixing
+   two deriver bugs and adding field-scoped grants took the total from 22.7% to
+   51.5% without weakening security. There is more of that available.
+4. **The setup cost is the objection.** Effect classes and scoped grants were
+   hand-written per API. That is the policy-sprawl problem this project claims
+   to answer, and one afternoon for four APIs does not answer it.
+
+**The obligation this creates:** the next milestone either raises this number
+materially with better contracts and grants, or the thesis is wrong and should
+be recorded as disproven in [`RESEARCH.md`](RESEARCH.md). It should not be
+allowed to sit at 51.5% while features accumulate around it.
 
 ## 3. Unverified: the research foundation
 
@@ -56,6 +81,15 @@ is published anywhere outside this repository.
 ### 4.1 Provenance is not intent
 
 Answering *who wrote this value* is not answering *what they meant by it*.
+
+**Now quantified.** On AgentDojo this accounts for 28 of the 49 security
+escapes: 20 where the attacker *selects* a legitimate directory entry
+(`reserve_hotel` on a real hotel a poisoned review recommended) and 8 where a
+low-entropy token in the principal's own prompt collides with the attacker's
+target — *"what are we doing on June 13"* authorises `delete_file(id="13")`.
+`Policy.min_quotation_length` addresses the second class and is priced in
+[`BENCHMARKS.md`](BENCHMARKS.md); nothing addresses the first, because it is
+intent.
 
 An address the principal named **in order to forbid it** — "never mail anything
 to `exfil@evil.example`" — is still an address the principal named, and is
@@ -83,6 +117,14 @@ consequences:
   natural-language command has authority carried in prose. The blunt instrument
   is to mark it `AUTHORITY` with no declared kinds, forcing whole-value
   attribution — which is usually a denial. That is a limitation, not a design.
+
+### 4.2b Non-identifier authority, quantified
+
+A call whose arguments are all content and timestamps has nothing to attribute.
+On AgentDojo, `create_calendar_event(title, start_time, end_time, description)`
+is admitted for exactly that reason — 20 of the 49 escapes. The linter *does*
+flag such a contract (`no-authority-parameter` on a writing tool), so it is
+detectable in advance; it is not preventable by provenance.
 
 ### 4.3 Extraction coverage is a security parameter
 
@@ -147,7 +189,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | Latency figures | **Measured**, on a shared unpinned host; spread reported. |
 | Extraction coverage is adequate | **Measured** on a synthetic corpus: 93% recall, 0 false positives. Not measured against real traffic. |
 | Contract derivation is accurate | **Measured** on 25 hand-labelled schemas: 100% authority recall, 0 dangerous misses. Ground truth is our own. |
-| Task utility under enforcement | **Unmeasured.** The decisive number. |
+| Task utility under enforcement | **Measured**: 51.5% on AgentDojo ground-truth replay, against 92.0% security. A lower bound, and below what the thesis predicts. |
 | Literature comparisons | **Unverified** — search summaries, not primary sources. |
 | Anyone wants this | **Unvalidated.** No users, no customers, no pilot. Every business statement in this repository is hypothesis. |
 

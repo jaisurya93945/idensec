@@ -126,6 +126,26 @@ def _kind(
     )
 
 
+UNCLASSIFIED = "unclassified"
+"""The kind of an authority value that matches no registered pattern.
+
+Plenty of authority-bearing values have no surface grammar: a channel name, a
+hotel name, an opaque short id. They are still *values*, and a source can still
+be the right place to learn them -- a hotel directory is authoritative about
+hotel names in a way a review is not.
+
+Without a name for that case there was nothing to grant, so such values were
+permanently unauthorised and the only way to use one was to name it in the task
+by hand. Naming the case makes it grantable:
+
+    Source("directory", Trust.TOOL_TRUSTED,
+           authoritative_paths={"**.hotel_list[*].name": {UNCLASSIFIED}})
+
+It is deliberately not granted by ``authoritative_for`` defaults anywhere: an
+unclassified value is the broadest thing a source can be trusted with, so it
+should always be an explicit, path-scoped decision.
+"""
+
 KIND_REGISTRY: dict[str, OperandKind] = {}
 
 

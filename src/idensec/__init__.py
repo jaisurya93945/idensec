@@ -47,7 +47,7 @@ from .contracts import (
     derive_contract,
 )
 from .decision import Decision, Finding, FindingCode, Verdict
-from .kinds import OperandKind, extract, register_kind
+from .kinds import UNCLASSIFIED, OperandKind, extract, register_kind
 from .labels import Attribution, AttributionState, Origin, Sensitivity, Source, Trust
 from .ledger import Operand, OperandLedger
 from .monitor import Session, SessionHalted
@@ -59,6 +59,7 @@ __all__ = [
     "OBSERVE",
     "STRICT",
     "SUPERVISED",
+    "UNCLASSIFIED",
     "Attribution",
     "AttributionState",
     "AuditChain",

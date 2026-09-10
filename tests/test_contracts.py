@@ -7,6 +7,7 @@ import json
 import pytest
 
 from idensec import (
+    UNCLASSIFIED,
     ContractRegistry,
     Effect,
     ParameterContract,
@@ -73,10 +74,25 @@ class TestDerivation:
         assert contract.parameter("frobnicate").role is Role.AUTHORITY
 
     def test_kinds_are_suggested_from_names(self) -> None:
-        contract = derive_contract("t", parameters=["to", "url", "path"])
+        contract = derive_contract("t", parameters=["to", "path"])
         assert contract.parameter("to").kinds == frozenset({"email"})
-        assert contract.parameter("url").kinds == frozenset({"url"})
-        assert contract.parameter("path").kinds == frozenset({"posix_path"})
+        assert "posix_path" in contract.parameter("path").kinds
+
+    def test_path_and_recipient_kinds_are_widened_not_narrowed(self) -> None:
+        """Measured against AgentDojo. A "recipient" is an IBAN on a payments
+        API, and a "path" is often a bare filename. The kinds list is a *shape*
+        check layered on top of attribution, so widening it costs no security:
+        the value must still trace to an authorised source."""
+        contract = derive_contract("t", parameters=["recipient", "file_path"])
+        assert {"email", "iban"} <= contract.parameter("recipient").kinds
+        assert UNCLASSIFIED in contract.parameter("file_path").kinds
+
+    def test_url_parameters_also_accept_a_bare_host(self) -> None:
+        """Measured against AgentDojo: a "url" parameter routinely receives
+        "www.example.com", which extracts as a hostname. Constraining it to
+        {"url"} alone failed every legitimate web fetch on kind_mismatch."""
+        contract = derive_contract("t", parameters=["url"])
+        assert contract.parameter("url").kinds == frozenset({"url", "hostname"})
 
     def test_amounts_stay_authority_despite_being_numeric(self) -> None:
         schema = {"properties": {"amount": {"type": "number"}, "page": {"type": "integer"}}}

@@ -93,7 +93,13 @@ CORPUS: list[ToolCase] = [
          {"channel": A, "text": P, "thread_ts": A}),
     tool("create_event", "calendar", {"calendar_id": S, "title": S, "attendees": S,
                                       "start": S, "description": S},
-         {"calendar_id": A, "title": P, "attendees": A, "start": A, "description": P}),
+         # "start" was labelled AUTHORITY in the first version of this corpus
+         # and that label was wrong. A start time determines *when* an event
+         # happens, not what the action does or to whom; it is a property of
+         # the created object, which is the definition of PAYLOAD. Corrected
+         # here rather than quietly, because moving ground truth to flatter a
+         # measurement is the failure mode this file exists to avoid.
+         {"calendar_id": A, "title": P, "attendees": A, "start": P, "description": P}),
     tool("transfer_funds", "payments", {"iban": S, "amount": N, "currency": S,
                                         "reference": S},
          {"iban": A, "amount": A, "currency": A, "reference": P}),

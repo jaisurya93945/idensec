@@ -31,6 +31,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from .kinds import UNCLASSIFIED
+
 __all__ = [
     "ContractRegistry",
     "Effect",
@@ -321,24 +323,76 @@ _ADVISORY_HINTS = (
     "timezone",
     "priority",
     "style",
+    # Temporal parameters. Measured against AgentDojo, these were the single
+    # largest source of false denials: a date determines *when* an action
+    # happens, not what it does to whom, and the agent legitimately derives
+    # "2024-05-26" from "May 26th" -- a semantic step no provenance system can
+    # follow. Treating them as authority-bearing denied most calendar work for
+    # no security gain. A destructive tool whose parameters are *all* advisory
+    # is still caught by the linter's no-authority-parameter check.
+    "date",
+    "day",
+    "time",
+    "datetime",
+    "timestamp",
+    "start",
+    "end",
+    "start_time",
+    "end_time",
+    "start_date",
+    "end_date",
+    "since",
+    "until",
+    "before",
+    "after",
+    "year",
+    "month",
+    "week",
+    "duration",
+    "start_day",
+    "end_day",
+    "day_of_week",
+    "hour",
+    "minute",
 )
 
-_KIND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("email", "mail", "recipient", "to", "cc", "bcc", "sender", "from"), "email"),
-    (("url", "link", "endpoint", "webhook", "callback", "href"), "url"),
+_KIND_HINTS: tuple[tuple[tuple[str, ...], str | tuple[str, ...]], ...] = (
+    # "recipient" is not a synonym for "email address": a payments API sends
+    # to an IBAN, a wallet API to a chain address. Measured against AgentDojo,
+    # constraining it to {"email"} failed every legitimate transfer on
+    # kind_mismatch. The kinds list is a *shape* check layered on top of
+    # attribution, so widening it costs no security -- the value must still be
+    # attributed to an authorised source.
+    (("recipient", "recipients", "payee", "beneficiary"),
+     ("email", "iban", "account_number", "crypto_address", UNCLASSIFIED)),
+    (("email", "mail", "to", "cc", "bcc", "sender", "from"), "email"),
+    # A "url" parameter routinely receives a scheme-less host such as
+    # "www.example.com", which extracts as a hostname rather than a url.
+    # Measured against AgentDojo, constraining these to {"url"} alone failed
+    # every legitimate web fetch on kind_mismatch.
+    (("url", "link", "endpoint", "webhook", "callback", "href"), ("url", "hostname")),
     (("host", "hostname", "domain", "server"), "hostname"),
-    (("path", "file", "filename", "filepath", "dir", "directory"), "posix_path"),
+    # A path parameter routinely receives a bare name such as
+    # "bill-december.txt", which has no path grammar at all. UNCLASSIFIED is
+    # listed so the shape check accepts it; attribution is unaffected.
+    (("path", "file", "filename", "filepath", "dir", "directory"),
+     ("posix_path", "windows_path", "unc_path", UNCLASSIFIED)),
     (("account", "iban", "card", "wallet"), "iban"),
     (("phone", "msisdn", "mobile"), "phone"),
-    (("id", "uuid", "guid"), "uuid"),
+    # Deliberately narrow: an "_id" suffix does not mean RFC 4122. Constraining
+    # every *_id parameter to the uuid kind made every call carrying a short
+    # opaque id fail on kind_mismatch, measured against AgentDojo. Such
+    # parameters stay AUTHORITY with no kind constraint, which requires the
+    # whole value to be attributable -- the restrictive reading.
+    (("uuid", "guid"), "uuid"),
 )
 
 
 def _kinds_for(name: str) -> frozenset[str]:
     lowered = name.lower()
-    for tokens, kind in _KIND_HINTS:
+    for tokens, kinds in _KIND_HINTS:
         if any(token == lowered or token in lowered.split("_") for token in tokens):
-            return frozenset({kind})
+            return frozenset({kinds} if isinstance(kinds, str) else kinds)
     return frozenset()
 
 

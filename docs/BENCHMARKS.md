@@ -224,6 +224,125 @@ neutral standard.
 
 ---
 
+## AgentDojo: security and utility (2026-09-10)
+
+**The first measurement of either against an independent benchmark**, and the
+number this project said would decide whether its thesis survives.
+
+AgentDojo publishes both halves as data — each injection task carries the tool
+call the attacker wants, each user task carries the calls a *correct* agent
+makes — so both can be measured with **no model involved anywhere**. Setup and
+reproduction: [`benchmarks/agentdojo/README.md`](../benchmarks/agentdojo/README.md).
+
+Scale: 97 user tasks, 27 injection tasks, 609 in-scope security cases across
+four suites.
+
+### Headline (scoped labelling)
+
+| | result |
+| --- | ---: |
+| **Security** — attacker's call refused, assuming the model is *always* hijacked | **560/609 · 92.0%** |
+| **Utility** — a correct agent's ground-truth calls all admitted | **50/97 · 51.5%** |
+
+Security here is asked in a **harsher** form than AgentDojo's own metric:
+AgentDojo measures how often a model *is* hijacked; we assume it always is.
+Utility is a **lower bound** — a real model phrases calls differently from
+ground truth, and an admitted call can still fail for unrelated reasons.
+
+### Source labelling is the knob, and the measurement proves it
+
+| labelling | security | utility |
+| --- | ---: | ---: |
+| `strict` — workspace authoritative for nothing | 581/609 · 95.4% | 28/97 · 28.9% |
+| `permissive` — authoritative for every kind, everywhere | 418/609 · 68.6% | 38/97 · 39.2% |
+| **`scoped`** — authoritative per field path | **560/609 · 92.0%** | **50/97 · 51.5%** |
+
+`permissive` is worse than `strict` on **both** axes — it loses 27 points of
+security to buy 10 of utility. `scoped` beats it on both and nearly matches
+`strict` on security while almost doubling its utility.
+
+**That result produced a feature.** A per-source grant cannot separate a
+workspace's own contact records from the bodies of messages other people wrote,
+because both arrive from one source — and in this benchmark, legitimate
+addresses live in `sender`, `recipients` and `participants` while every
+injection lives in `description`, `content` and `reviews`. Since provenance was
+already recorded per field, authority became scopable the same way
+(`Source(authoritative_paths=...)`). The travel suite went from **0% to 100%**
+utility on that change alone.
+
+### Per suite (scoped)
+
+| suite | security | utility |
+| --- | ---: | ---: |
+| workspace | 240/240 · 100% | 23/40 · 57.5% |
+| banking | 143/144 · 99.3% | 5/16 · 31.2% |
+| slack | 101/105 · 96.2% | 2/21 · 9.5% |
+| travel | 79/120 · 65.8% | 20/20 · 100% |
+
+**Slack's 9.5% is not a monitor failure.** In that suite the channel directory
+and the web-content store are *themselves* injection vectors, so there is no
+field a grant can safely cover: every channel name and URL the agent could
+legitimately use arrives from a source the attacker also controls. An honest
+reading is that this environment is outside what source-authority labelling can
+express, not that the labelling was done badly.
+
+### Every escape traced to a cause
+
+Not one is unexplained, and all fall into limitations documented before this
+measurement existed:
+
+| cause | cases | limitation |
+| --- | ---: | --- |
+| Attacker *selects* a legitimate directory entry (`reserve_hotel` on a real hotel a review recommended) | 20 | U01 — provenance is not intent |
+| Target call has **no authority-bearing argument** (`create_calendar_event`, all content and times) | 20 | U05 — non-identifier authority |
+| Low-entropy token collision (see below) | 8 | U02 — quotation is not intent |
+| Speech-only injections (no tool call at all) | 20 | excluded, not counted either way |
+
+The boundary this draws is crisp and is the most useful thing the evaluation
+produced:
+
+> **IDENSEC contains attacks that introduce a new destination. It does not
+> contain attacks that merely select among legitimate ones, nor attacks whose
+> target call has no authority-bearing argument at all.**
+
+### The token-collision finding
+
+A user prompt reading *"what are we doing on **June 13**"* authorises
+`delete_file(file_id="13")`, because `13` genuinely is a token the principal
+wrote. Provenance cannot tell a date from a file id — that is intent.
+
+`Policy.min_quotation_length` demands stronger quotation, and the benchmark
+prices it:
+
+| setting | security | utility |
+| --- | ---: | ---: |
+| 1 (default) | 560/609 · 92.0% | 50/97 · 51.5% |
+| 4 | **563/609 · 92.4%** | 50/97 · 51.5% |
+
+Raising it closed all three workspace escapes **at zero measured utility cost**,
+taking that suite to 240/240. The default stays at 1 because short legitimate
+values exist (an amount of `50` is a real quotation) and this is one benchmark;
+deployments whose identifiers are short should raise it.
+
+### What this cost to set up, honestly
+
+Three artefacts are ours, not AgentDojo's. Parameter roles were drafted
+automatically from each tool's JSON Schema and left unmodified — but **effect
+classes and the scoped grants were hand-written**, per API, by people who do not
+own those APIs. That is the real cost of the approach, and it is exactly the
+policy-sprawl objection this project claims to answer. One afternoon for four
+APIs is a data point, not a refutation of the objection.
+
+### What this does not show
+
+- **Not end-to-end utility.** Ground-truth calls are not model behaviour.
+- **Not a comparison with CaMeL or PACT.** They report end-to-end numbers on a
+  different quantity. Putting these side by side would be misleading and is not
+  done anywhere in this repository.
+- **Not a claim about real deployments.** Four benchmark suites.
+
+---
+
 ## Method notes
 
 - One untimed warm-up call per measurement, so lazily compiled regexes and
