@@ -531,19 +531,25 @@ class Session:
         wrote the value, that origin is what authorises it, and an attacker
         echoing the same value into a page must not be able to change the
         answer (ADR-0008).
+
+        *Every* matching origin is collected, not the first. Authority is
+        existential, so stopping early can hand the checker an unauthorised
+        origin while an authorised one exists further down -- which measurably
+        denied legitimate calls whose entity id also appeared inside an earlier
+        free-text field.
         """
-        origin = self.ledger.derivable_from(value, self._trusted_source_ids)
-        if origin is not None:
+        origins = self.ledger.all_derivations(value, self._trusted_source_ids)
+        if origins:
             return Attribution(
                 state=AttributionState.ATTRIBUTED,
-                origins=(origin,),
+                origins=origins,
                 derivation="trusted-substring",
             )
-        origin = self.ledger.derivable_from(value, self._untrusted_source_ids)
-        if origin is not None:
+        origins = self.ledger.all_derivations(value, self._untrusted_source_ids)
+        if origins:
             return Attribution(
                 state=AttributionState.ATTRIBUTED,
-                origins=(origin,),
+                origins=origins,
                 derivation="untrusted-substring",
             )
         return Attribution(state=AttributionState.UNATTRIBUTED, derivation="none")
@@ -560,9 +566,7 @@ class Session:
         ]
         origins: list[Origin] = []
         for source_id in (*self._trusted_source_ids, *self._untrusted_source_ids):
-            origin = self.ledger.derivable_from(resolution.text, (source_id,))
-            if origin is not None:
-                origins.append(origin)
+            origins.extend(self.ledger.all_derivations(resolution.text, (source_id,)))
         if origins:
             attributions.append(
                 Attribution(

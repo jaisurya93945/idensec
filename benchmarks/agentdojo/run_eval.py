@@ -242,7 +242,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    global MIN_QUOTATION  # noqa: PLW0603 - a single knob for the whole run
+    global MIN_QUOTATION
     MIN_QUOTATION = args.min_quotation
 
     sys.path.insert(0, str(args.deps))

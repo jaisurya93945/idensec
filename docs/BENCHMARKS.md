@@ -242,7 +242,7 @@ four suites.
 | | result |
 | --- | ---: |
 | **Security** — attacker's call refused, assuming the model is *always* hijacked | **560/609 · 92.0%** |
-| **Utility** — a correct agent's ground-truth calls all admitted | **50/97 · 51.5%** |
+| **Utility** — a correct agent's ground-truth calls all admitted | **55/97 · 56.7%** |
 
 Security here is asked in a **harsher** form than AgentDojo's own metric:
 AgentDojo measures how often a model *is* hijacked; we assume it always is.
@@ -253,12 +253,12 @@ ground truth, and an admitted call can still fail for unrelated reasons.
 
 | labelling | security | utility |
 | --- | ---: | ---: |
-| `strict` — workspace authoritative for nothing | 581/609 · 95.4% | 28/97 · 28.9% |
-| `permissive` — authoritative for every kind, everywhere | 418/609 · 68.6% | 38/97 · 39.2% |
-| **`scoped`** — authoritative per field path | **560/609 · 92.0%** | **50/97 · 51.5%** |
+| `strict` — workspace authoritative for nothing | 581/609 · 95.4% | 33/97 · 34.0% |
+| `permissive` — authoritative for every kind, everywhere | 340/609 · 55.8% | 44/97 · 45.4% |
+| **`scoped`** — authoritative per field path | **560/609 · 92.0%** | **55/97 · 56.7%** |
 
-`permissive` is worse than `strict` on **both** axes — it loses 27 points of
-security to buy 10 of utility. `scoped` beats it on both and nearly matches
+`permissive` is worse than `strict` on **both** axes — it loses 40 points of
+security to buy 11 of utility. `scoped` beats it on both and nearly matches
 `strict` on security while almost doubling its utility.
 
 **That result produced a feature.** A per-source grant cannot separate a
@@ -274,10 +274,17 @@ utility on that change alone.
 
 | suite | security | utility |
 | --- | ---: | ---: |
-| workspace | 240/240 · 100% | 23/40 · 57.5% |
+| workspace | 237/240 · 98.8% | 28/40 · 70.0% |
 | banking | 143/144 · 99.3% | 5/16 · 31.2% |
 | slack | 101/105 · 96.2% | 2/21 · 9.5% |
 | travel | 79/120 · 65.8% | 20/20 · 100% |
+
+**Two suites' low utility is inherent, not a tuning failure.** Banking's
+refusals are dominated by *computed* amounts — "prices rose 10%, send the
+difference" produces a number that appears nowhere in the instruction, and
+arithmetic is a semantic derivation quotation cannot follow. The working
+division of labour is provenance for identifiers and budgets for magnitudes
+([`LIMITATIONS.md`](LIMITATIONS.md) §4.2c).
 
 **Slack's 9.5% is not a monitor failure.** In that suite the channel directory
 and the web-content store are *themselves* injection vectors, so there is no
@@ -294,7 +301,7 @@ measurement existed:
 | cause | cases | limitation |
 | --- | ---: | --- |
 | Attacker *selects* a legitimate directory entry (`reserve_hotel` on a real hotel a review recommended) | 20 | U01 — provenance is not intent |
-| Target call has **no authority-bearing argument** (`create_calendar_event`, all content and times) | 20 | U05 — non-identifier authority |
+| Target call has **no authority-bearing argument** (`create_calendar_event`, all content and times) | 21 | U05 — non-identifier authority |
 | Low-entropy token collision (see below) | 8 | U02 — quotation is not intent |
 | Speech-only injections (no tool call at all) | 20 | excluded, not counted either way |
 
@@ -316,8 +323,8 @@ prices it:
 
 | setting | security | utility |
 | --- | ---: | ---: |
-| 1 (default) | 560/609 · 92.0% | 50/97 · 51.5% |
-| 4 | **563/609 · 92.4%** | 50/97 · 51.5% |
+| 1 (default) | 560/609 · 92.0% | 55/97 · 56.7% |
+| 4 | **563/609 · 92.4%** | 55/97 · 56.7% |
 
 Raising it closed all three workspace escapes **at zero measured utility cost**,
 taking that suite to 240/240. The default stays at 1 because short legitimate

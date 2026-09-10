@@ -132,6 +132,66 @@ class TestDerivation:
         assert ledger.derivable_from("the quarterly report", ["user"]) is not None
 
 
+class TestAllDerivations:
+    """Taking only the first matching origin was a real defect.
+
+    Authority is decided existentially -- a value is admissible if *any*
+    contributing source is authorised for it -- so stopping at the first match
+    can hand the checker an unauthorised origin while an authorised one exists
+    further down. Measured against AgentDojo, this denied legitimate calls
+    whose entity id also appeared inside an earlier free-text field.
+    """
+
+    def test_every_matching_origin_is_returned(self, ledger: OperandLedger) -> None:
+        ledger.bind_source_lookup(_as_web)
+        ledger.seal(WEB, "a review mentioning 5 stars", step=1, path="reviews[0]")
+        ledger.seal(WEB, "5", step=2, path="events[0].id")
+        origins = ledger.all_derivations("5", ["web"])
+        assert {o.path for o in origins} == {"reviews[0]", "events[0].id"}
+
+    def test_derivable_from_still_returns_one(self, ledger: OperandLedger) -> None:
+        ledger.bind_source_lookup(_as_user)
+        ledger.index(USER, "pay 50 today", step=1)
+        assert ledger.derivable_from("50", ["user"]) is not None
+
+
+class TestNumericForms:
+    """A tool takes 4.0 where the principal wrote 4. Measured against
+    AgentDojo, that mismatch alone denied half the banking suite."""
+
+    @pytest.mark.parametrize(
+        ("written", "sent"),
+        [
+            ("pay 4 pounds", "4.0"),
+            ("pay 4.0 pounds", "4"),
+            ("transfer 1,200 now", "1200"),
+            ("transfer 1200 now", "1,200"),
+            ("send 200.29 please", "200.29"),
+            ("send 50 please", "50.0"),
+        ],
+    )
+    def test_respellings_of_the_same_number_match(
+        self, ledger: OperandLedger, written: str, sent: str
+    ) -> None:
+        ledger.bind_source_lookup(_as_user)
+        ledger.index(USER, written, step=1)
+        assert ledger.derivable_from(sent, ["user"]) is not None
+
+    def test_a_different_number_still_does_not_match(self, ledger: OperandLedger) -> None:
+        """Re-spelling is not rounding: 4.5 is not 4."""
+        ledger.bind_source_lookup(_as_user)
+        ledger.index(USER, "pay 4 pounds", step=1)
+        assert ledger.derivable_from("4.5", ["user"]) is None
+        assert ledger.derivable_from("40", ["user"]) is None
+
+    def test_carving_is_still_refused(self, ledger: OperandLedger) -> None:
+        """Regression: numeric normalisation must not reopen the substring
+        bypass that whole-token matching closed."""
+        ledger.bind_source_lookup(_as_user)
+        ledger.index(USER, "Pay invoice 100234 for 50", step=1)
+        assert ledger.derivable_from("1002", ["user"]) is None
+
+
 class TestBudget:
     def test_observation_budget_is_enforced(self, ids) -> None:
         ledger = OperandLedger(id_factory=ids, max_indexed_chars=32)

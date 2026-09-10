@@ -12,8 +12,8 @@ The previous entry set a condition: *if a utility measurement lands nearer
 38–46% than 90%+, the thesis is wrong, determinism was not the binding
 constraint, and this joins the pile of correct unadopted defences.*
 
-**The measurement now exists: 51.5% utility at 92.0% security on AgentDojo.**
-That is nearer the failing range than the passing one.
+**The measurement now exists: 56.7% utility at 92.0% security on AgentDojo.**
+That is above the failing range and far below the passing one.
 
 ### Is the thesis disproven?
 
@@ -22,7 +22,7 @@ way rather than either "vindicated" or "dead" is the only defensible reading,
 and the reasons are specific:
 
 - The number is a **lower bound** — ground-truth calls, not model behaviour.
-- It moved from **22.7% to 51.5% in one sitting**, purely by fixing two deriver
+- It moved from **22.7% to 56.7% in one sitting**, purely by fixing two deriver
   bugs and adding field-scoped authority grants. A number still moving that fast
   under obvious fixes has not converged, and treating an unconverged number as a
   verdict would be as dishonest as ignoring it.
@@ -37,7 +37,7 @@ if a focused pass on contracts and grants does not take utility materially past
 argument-level containment costs more than deployments will pay, and
 [`RESEARCH.md`](RESEARCH.md) should say so as a `RESULT`, not as a caveat.
 
-**The failure mode to avoid is obvious and tempting: leaving 51.5% in a table
+**The failure mode to avoid is obvious and tempting: leaving 56.7% in a table
 while building the next feature.** Nothing else on the roadmap matters more than
 this number.
 

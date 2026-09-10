@@ -24,7 +24,7 @@ same trace always produces the same verdict.
 
 > **Status: 0.1, early and unreviewed.** Measured against AgentDojo with no
 > model in the loop: **92.0% security** (assuming the model is *always*
-> hijacked) at **51.5% utility**. That utility number is below what this
+> hijacked) at **56.7% utility**. That utility number is below what this
 > project's own thesis predicts, and
 > [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) §2 says so plainly rather than
 > burying it. Read that before anything else here.
@@ -238,9 +238,9 @@ would make, and is therefore a lower bound.
 
 | labelling | security | utility |
 | --- | ---: | ---: |
-| workspace authoritative for nothing | 95.4% | 28.9% |
-| authoritative for everything | 68.6% | 39.2% |
-| **authoritative per field path** | **92.0%** | **51.5%** |
+| workspace authoritative for nothing | 95.4% | 34.0% |
+| authoritative for everything | 55.8% | 45.4% |
+| **authoritative per field path** | **92.0%** | **56.7%** |
 
 Every one of the 49 escapes is traced to a cause, and all of them fall into
 limitations documented *before* the measurement existed. The boundary it draws:
@@ -249,9 +249,9 @@ limitations documented *before* the measurement existed. The boundary it draws:
 > contain attacks that merely **select among legitimate ones**, nor attacks
 > whose target call has **no authority-bearing argument** at all.
 
-**51.5% is below what this project's thesis predicts,** and closer to the range
+**56.7% is below what this project's thesis predicts,** and closer to the range
 at which [`docs/REVIEW.md`](docs/REVIEW.md) said the thesis should be considered
-wrong. It moved from 22.7% to 51.5% in one sitting on contract fixes, so it has
+wrong. It moved from 22.7% to 56.7% in one sitting on contract fixes, so it has
 not converged — but raising it is now the only thing on the roadmap that matters.
 
 **Latency** — `admit()` is sub-millisecond at typical session length:

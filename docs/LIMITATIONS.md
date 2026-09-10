@@ -32,7 +32,7 @@ involved — with the best labelling we could write:
 | | |
 | --- | ---: |
 | Security (assuming the model is *always* hijacked) | 560/609 · **92.0%** |
-| Utility (a correct agent's ground-truth calls admitted) | 50/97 · **51.5%** |
+| Utility (a correct agent's ground-truth calls admitted) | 55/97 · **56.7%** |
 
 Full method, per-suite breakdown and cause analysis in
 [`BENCHMARKS.md`](BENCHMARKS.md).
@@ -41,7 +41,8 @@ Full method, per-suite breakdown and cause analysis in
 than to success.** [`REVIEW.md`](REVIEW.md) stated it before the number existed:
 the thesis predicts near-oracle utility, and *"if a utility measurement lands
 nearer 38–46% than 90%+, the thesis is wrong, determinism was not the binding
-constraint"*. 51.5% is nearer the first.
+constraint"*. 56.7% is above that range and still far below what the thesis
+predicts.
 
 Four things are true about that number, and none of them is a reason to dismiss
 it:
@@ -54,7 +55,7 @@ it:
    grant is safe. That environment is outside what source labelling can express.
 3. **Most remaining refusals were contract quality, not the monitor.** Fixing
    two deriver bugs and adding field-scoped grants took the total from 22.7% to
-   51.5% without weakening security. There is more of that available.
+   56.7% without weakening security. There is more of that available.
 4. **The setup cost is the objection.** Effect classes and scoped grants were
    hand-written per API. That is the policy-sprawl problem this project claims
    to answer, and one afternoon for four APIs does not answer it.
@@ -62,7 +63,7 @@ it:
 **The obligation this creates:** the next milestone either raises this number
 materially with better contracts and grants, or the thesis is wrong and should
 be recorded as disproven in [`RESEARCH.md`](RESEARCH.md). It should not be
-allowed to sit at 51.5% while features accumulate around it.
+allowed to sit at 56.7% while features accumulate around it.
 
 ## 3. Unverified: the research foundation
 
@@ -125,6 +126,27 @@ On AgentDojo, `create_calendar_event(title, start_time, end_time, description)`
 is admitted for exactly that reason — 20 of the 49 escapes. The linter *does*
 flag such a contract (`no-authority-parameter` on a writing tool), so it is
 detectable in advance; it is not preventable by provenance.
+
+### 4.2c Computed authority values cannot be attributed
+
+Agents legitimately *compute* values, and arithmetic is a semantic derivation
+that quotation cannot follow. Measured on AgentDojo's banking suite, this is the
+dominant cause of refusals there: *"Spotify raised prices 10% this month, send
+them the difference"* yields an amount of `5.0`, which appears nowhere in the
+principal's instruction. Splitting a bill, adding VAT, adjusting rent from a
+document — all the same shape.
+
+Treating the amount as authority-bearing denies the legitimate case exactly as
+often as the attacker's, which is accidental security rather than designed
+security.
+
+**The division of labour that works:** provenance handles *identifiers*, budgets
+handle *magnitudes*. Let the amount be `PAYLOAD` and bound it with a
+`Budget` — the destination is still attributed, so an attacker-chosen recipient
+is refused regardless, and no amount can exceed what the principal allowed.
+Demonstrated in `tests/test_budget.py::TestComputedAmounts`.
+
+The cost is that the budget must be *stated*, which is §4.4 again.
 
 ### 4.3 Extraction coverage is a security parameter
 
@@ -189,7 +211,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | Latency figures | **Measured**, on a shared unpinned host; spread reported. |
 | Extraction coverage is adequate | **Measured** on a synthetic corpus: 93% recall, 0 false positives. Not measured against real traffic. |
 | Contract derivation is accurate | **Measured** on 25 hand-labelled schemas: 100% authority recall, 0 dangerous misses. Ground truth is our own. |
-| Task utility under enforcement | **Measured**: 51.5% on AgentDojo ground-truth replay, against 92.0% security. A lower bound, and below what the thesis predicts. |
+| Task utility under enforcement | **Measured**: 56.7% on AgentDojo ground-truth replay, against 92.0% security. A lower bound, and below what the thesis predicts. |
 | Literature comparisons | **Unverified** — search summaries, not primary sources. |
 | Anyone wants this | **Unvalidated.** No users, no customers, no pilot. Every business statement in this repository is hypothesis. |
 

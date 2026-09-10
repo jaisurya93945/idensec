@@ -264,7 +264,37 @@ _PAYLOAD_HINTS = (
     "markdown",
     "html_body",
     "reason",
+    # Content that reads like a place or a label but decides nothing. Measured
+    # against AgentDojo: a calendar event's "location" was treated as
+    # authority-bearing and denied every legitimate event creation, for no
+    # security gain -- an event in the wrong place is a nuisance, not an
+    # exfiltration.
+    "location",
+    "venue",
+    "place",
+    "label",
+    "tag",
+    "tags",
 )
+
+_FILTER_HINTS = (
+    "query",
+    "search",
+    "search_term",
+    "keyword",
+    "keywords",
+    "term",
+    "filter",
+    "pattern",
+)
+"""Names that select what to look at rather than what to do.
+
+Downgraded to PAYLOAD **only on read-only tools**. On anything that writes,
+executes or egresses, a "query" may well be a command -- an SQL statement is
+the obvious case -- so the restrictive reading is kept. The linter's
+no-authority-parameter check is the backstop for a read-only tool that turns out
+to be dangerous after all.
+"""
 
 _IDENTIFIER_SUFFIXES = (
     "_id",
@@ -428,6 +458,9 @@ def derive_contract(
     if parameters is not None:
         names = list(parameters)
 
+    declared_effects = frozenset(Effect(e) for e in effects)
+    read_only = bool(declared_effects) and declared_effects <= {Effect.READ}
+
     declared: dict[str, ParameterContract] = {}
     for name in names:
         lowered = name.lower()
@@ -435,6 +468,10 @@ def derive_contract(
         if lowered.endswith(_IDENTIFIER_SUFFIXES):
             # Checked first: an identifier suffix outranks every content hint.
             role = Role.AUTHORITY
+        elif read_only and any(
+            hint == lowered or hint in lowered.split("_") for hint in _FILTER_HINTS
+        ):
+            role = Role.PAYLOAD
         elif lowered in _DANGEROUS_FLAGS:
             role = Role.AUTHORITY
         elif lowered in _ADVISORY_HINTS:
@@ -457,7 +494,7 @@ def derive_contract(
     return ToolContract(
         tool=tool,
         parameters=declared,
-        effects=frozenset(Effect(e) for e in effects),
+        effects=declared_effects,
         default_role=Role.AUTHORITY,
         description=description or (schema.get("description", "") if schema else ""),
     )

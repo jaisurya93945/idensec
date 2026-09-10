@@ -69,6 +69,38 @@ value cannot be carved out of the middle of a longer identifier.
 """
 
 
+def _candidate_forms(value: str, minimum: int) -> tuple[str, ...]:
+    """Normalised spellings of a value that all count as the same quotation.
+
+    Numbers reach tools in more shapes than they appear in prose: a tool takes
+    ``4.0`` where the principal wrote ``4``, or ``1200`` where they wrote
+    ``1,200``. Measured against AgentDojo, that mismatch alone denied half the
+    banking suite. The forms generated here are exact re-spellings of the same
+    number -- no rounding, no unit conversion, nothing semantic.
+    """
+    base = " ".join(value.split()).casefold()
+    if len(base) < minimum:
+        return ()
+    forms = {base}
+    stripped = base.replace(",", "").replace("_", "")
+    for prefix in ("$", "£", "€", "₹"):
+        stripped = stripped.removeprefix(prefix)
+    try:
+        number = float(stripped)
+    except ValueError:
+        return tuple(sorted(forms))
+    if number == int(number):
+        forms.add(str(int(number)))
+        forms.add(f"{int(number)}.0")
+        # The principal may have written the grouped spelling. Generating it
+        # from the value is deterministic; normalising the haystack instead
+        # would rewrite text we are supposed to be quoting.
+        forms.add(f"{int(number):,}")
+    forms.add(stripped)
+    forms.add(repr(number))
+    return tuple(sorted(f for f in forms if len(f) >= minimum))
+
+
 def _contains_token(haystack: str, needle: str) -> bool:
     """Substring search that requires identifier boundaries on both sides."""
     start = 0
@@ -316,12 +348,30 @@ class OperandLedger:
     # -- derivation ------------------------------------------------------
 
     def derivable_from(self, value: str, source_ids: Iterable[str]) -> Origin | None:
-        """Whether ``value`` is derivable from text observed from those sources.
+        """First origin from which ``value`` is derivable, or None.
 
-        The permitted derivations are deliberately narrow and deliberately
-        deterministic: identity, **whole-token** quotation, case folding and
-        whitespace normalisation. Nothing semantic. If the principal wrote it,
-        the agent may quote it; that is the whole rule.
+        Retained for callers that need one origin; attribution uses
+        :meth:`all_derivations`, because taking only the first is a bug when the
+        authority check is existential.
+        """
+        found = self.all_derivations(value, source_ids)
+        return found[0] if found else None
+
+    def all_derivations(
+        self, value: str, source_ids: Iterable[str]
+    ) -> tuple[Origin, ...]:
+        """Every origin from which ``value`` is derivable.
+
+        Returning only the first match was a real defect. Authority is decided
+        existentially -- a value is admissible if *any* contributing source is
+        authorised for it -- so stopping at the first match can hand the checker
+        an unauthorised origin while an authorised one exists further down. In
+        AgentDojo this denied legitimate calls whose entity id also happened to
+        appear inside some earlier free-text field.
+
+        The permitted derivations are deliberately narrow and deterministic:
+        identity, **whole-token** quotation, case folding, whitespace
+        normalisation, and numeric normalisation. Nothing semantic.
 
         The token-boundary requirement is a security fix, not a nicety. Plain
         substring matching lets an attacker carve a value out of the middle of
@@ -340,22 +390,25 @@ class OperandLedger:
         prefer an escalation policy over relying on attribution alone. This is
         recorded in ``docs/LIMITATIONS.md``.
         """
-        needle = " ".join(value.split()).casefold()
-        if len(needle) < self._min_derivation_length:
-            return None
+        needles = _candidate_forms(value, self._min_derivation_length)
+        if not needles:
+            return ()
         wanted = set(source_ids)
+        found: list[Origin] = []
         for observation in self._observations:
             if observation.source_id not in wanted:
                 continue
-            if _contains_token(observation.normalised, needle):
-                return Origin(
-                    source_id=observation.source_id,
-                    trust=self._trust_of(observation),
-                    sensitivity=self._sensitivity_of(observation),
-                    step=observation.step,
-                    path=observation.path,
+            if any(_contains_token(observation.normalised, n) for n in needles):
+                found.append(
+                    Origin(
+                        source_id=observation.source_id,
+                        trust=self._trust_of(observation),
+                        sensitivity=self._sensitivity_of(observation),
+                        step=observation.step,
+                        path=observation.path,
+                    )
                 )
-        return None
+        return tuple(found)
 
     # Trust and sensitivity are properties of the source, but observations are
     # what we retain; the session injects the lookup so the ledger stays free
