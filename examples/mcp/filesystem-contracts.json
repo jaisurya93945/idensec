@@ -1,0 +1,49 @@
+{
+  "schema": "idensec.contracts/v1",
+  "_comment": [
+    "Hand-completed from drafts produced by --emit-contracts.",
+    "Effects are declared by a human because they cannot be inferred from a",
+    "schema: guessing that a tool is read-only is the most dangerous inference",
+    "this system could make."
+  ],
+  "contracts": [
+    {
+      "tool": "read_file",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path"]}
+      }
+    },
+    {
+      "tool": "write_file",
+      "version": 1,
+      "effects": ["write", "irreversible"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path"]},
+        "content": {"role": "payload"}
+      }
+    },
+    {
+      "tool": "list_directory",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path"]}
+      }
+    },
+    {
+      "tool": "search_files",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path"]},
+        "pattern": {"role": "payload"}
+      }
+    }
+  ]
+}

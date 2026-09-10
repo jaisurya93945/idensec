@@ -1,0 +1,21 @@
+{
+  "schema": "idensec.proxy/v1",
+  "_comment": [
+    "Example: a filesystem MCP server, treated as untrusted content.",
+    "It is authoritative for nothing -- a document store may hold text, but it",
+    "does not get to choose which file the agent writes to or who it mails.",
+    "Replace task_file with a path your host writes and the agent cannot."
+  ],
+  "server": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/srv/docs"],
+  "source": {
+    "id": "filesystem",
+    "trust": "tool_untrusted",
+    "sensitivity": "internal",
+    "authoritative_for": [],
+    "description": "documents under /srv/docs; content is not vetted"
+  },
+  "policy": "strict",
+  "contracts": "filesystem-contracts.json",
+  "task_file": "/run/idensec/task.txt",
+  "audit": "/var/log/idensec/filesystem.jsonl"
+}

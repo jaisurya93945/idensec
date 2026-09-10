@@ -1,0 +1,337 @@
+"""An MCP stdio proxy that enforces argument provenance.
+
+The proxy sits between an MCP host and one MCP server and mediates exactly the
+two boundaries IDENSEC needs, both of which the protocol already provides:
+
+* ``tools/call`` **result** -> the read boundary. Text content is sealed before
+  it reaches the model.
+* ``tools/call`` **request** -> the write boundary. Arguments are attributed and
+  the call is admitted, denied, or escalated.
+* ``tools/list`` **result** -> tool descriptions are sealed (they are
+  server-supplied, which makes them the MCP tool-poisoning path) and draft
+  contracts can be emitted from their schemas.
+
+Everything else is forwarded untouched. A proxy that only forwards what it
+recognises breaks on the next protocol revision.
+
+**The proxy is not a trust boundary against the host.** It protects the
+*principal* from content the agent consumes. A host that chooses not to route
+through it is simply unprotected, which is the normal situation for any
+enforcement point outside the application.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import subprocess
+import sys
+import threading
+from typing import IO, Any
+
+from ..contracts import derive_contract
+from ..decision import Verdict
+from ..monitor import Session
+from .config import ProxyConfig
+from .jsonrpc import Message, error_result, read_messages, write_message
+
+__all__ = ["Proxy", "run"]
+
+ESCALATION_TEXT = (
+    "This action requires approval from the principal before it can proceed."
+)
+
+
+class Proxy:
+    """Mediates one MCP session.
+
+    Both pump threads touch the session, and a :class:`Session` belongs to one
+    linear execution by design -- sharing one across concurrent agents would
+    cross-contaminate provenance. A single lock keeps the invariant without
+    pretending the session is concurrent.
+    """
+
+    def __init__(self, config: ProxyConfig, *, log: IO[bytes] | None = None) -> None:
+        self.config = config
+        self._log = log if log is not None else sys.stderr.buffer
+        self._lock = threading.Lock()
+        self._pending: dict[Any, str] = {}
+        self._denied: set[Any] = set()
+        self._audit_seen = 0
+        self._drafts: dict[str, dict[str, Any]] = {}
+        self._host_out: IO[bytes] | None = None
+
+        self.session = Session(
+            contracts=config.contracts,
+            policy=config.policy,
+            sources=[config.source],
+            session_id=config.source.id,
+        )
+        self._principal_id = f"{config.source.id}::principal"
+        self._declare_principal()
+
+    # -- setup -----------------------------------------------------------
+
+    def _declare_principal(self) -> None:
+        """Index the principal's instruction, if the host supplied one."""
+        from ..labels import Source, Trust
+
+        self.session.declare_source(
+            Source(
+                self._principal_id,
+                Trust.USER_INPUT,
+                description="the principal's instruction, read out of band",
+            )
+        )
+        task = self.config.read_task()
+        if task.strip():
+            self.session.observe(self._principal_id, task)
+            self._note(f"indexed principal task ({len(task)} chars)")
+
+    def _note(self, text: str) -> None:
+        self._log.write(f"[idensec] {text}\n".encode())
+        self._log.flush()
+
+    def announce(self) -> None:
+        config = self.config
+        self._note(
+            f"proxying source '{config.source.id}' "
+            f"trust={config.source.trust.name} policy={config.policy_name} "
+            f"contracts={len(config.contracts)}"
+        )
+        for warning in config.warnings():
+            self._note(f"WARNING {warning}")
+
+    # -- host -> server --------------------------------------------------
+
+    def handle_outbound(self, message: Message) -> Message | None:
+        """Inspect a message on its way to the server.
+
+        Returns the message to forward, or ``None`` when the proxy has answered
+        it itself -- which is what a denial is.
+        """
+        if message.method != "tools/call" or not message.is_request:
+            return message
+
+        params = message.params
+        tool = params.get("name")
+        arguments = params.get("arguments")
+        if not isinstance(tool, str) or not isinstance(arguments, dict):
+            # Malformed by MCP's own rules. Forward and let the server reject
+            # it; inventing an error here would mask a protocol bug.
+            return message
+
+        with self._lock:
+            decision = self.session.admit(tool, arguments)
+            self._flush_audit()
+
+        if decision.verdict is Verdict.ALLOW:
+            self._pending[message.id] = tool
+            forwarded = dict(message.payload)
+            forwarded["params"] = {**params, "arguments": dict(decision.arguments)}
+            return Message(forwarded)
+
+        self._note(f"{decision.verdict.value.upper()} {tool}: {decision.reason()}")
+        self._denied.add(message.id)
+        text = (
+            ESCALATION_TEXT
+            if decision.verdict is Verdict.ESCALATE
+            else decision.agent_message
+        )
+        self._respond(error_result(message.id, text))
+        return None
+
+    # -- server -> host --------------------------------------------------
+
+    def handle_inbound(self, message: Message) -> Message | None:
+        """Inspect a message on its way back to the host."""
+        if not message.is_response:
+            return message
+        result = message.result
+        if result is None:
+            return message
+
+        tool = self._pending.pop(message.id, None)
+        if tool is not None:
+            return self._seal_tool_result(message, result)
+        if "tools" in result and isinstance(result["tools"], list):
+            return self._handle_tools_list(message, result)
+        return message
+
+    def _seal_tool_result(self, message: Message, result: dict[str, Any]) -> Message:
+        """Seal the text a tool returned before the model sees it."""
+        content = result.get("content")
+        if not isinstance(content, list):
+            return message
+        sealed_blocks = []
+        for index, block in enumerate(content):
+            if isinstance(block, dict) and isinstance(block.get("text"), str):
+                with self._lock:
+                    sealed = self.session.observe(
+                        self.config.source.id, block["text"], path=f"content[{index}]"
+                    )
+                sealed_blocks.append({**block, "text": sealed})
+            else:
+                sealed_blocks.append(block)
+        payload = dict(message.payload)
+        payload["result"] = {**result, "content": sealed_blocks}
+        return Message(payload)
+
+    def _handle_tools_list(self, message: Message, result: dict[str, Any]) -> Message:
+        """Seal tool descriptions and, optionally, draft contracts from schemas."""
+        tools = result["tools"]
+        sealed_tools = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                sealed_tools.append(tool)
+                continue
+            name = tool.get("name")
+            if isinstance(name, str) and self.config.emit_contracts:
+                self._draft(name, tool)
+            description = tool.get("description")
+            if self.config.seal_tool_descriptions and isinstance(description, str):
+                with self._lock:
+                    sealed = self.session.observe(
+                        self.config.source.id,
+                        description,
+                        path=f"tools.{name}.description",
+                    )
+                sealed_tools.append({**tool, "description": sealed})
+            else:
+                sealed_tools.append(tool)
+        if self.config.emit_contracts:
+            self._write_drafts()
+        payload = dict(message.payload)
+        payload["result"] = {**result, "tools": sealed_tools}
+        return Message(payload)
+
+    # -- contract drafting -----------------------------------------------
+
+    def _draft(self, name: str, tool: dict[str, Any]) -> None:
+        """Derive a starting contract from a tool's advertised schema.
+
+        A draft, never an authority. Effects are left empty on purpose -- they
+        cannot be read off a schema, and guessing that a tool is read-only
+        would be the most dangerous inference in the system. A draft with no
+        effects is one an operator must complete before it means anything.
+        """
+        schema = tool.get("inputSchema")
+        contract = derive_contract(
+            name,
+            schema if isinstance(schema, dict) else None,
+            description=str(tool.get("description", ""))[:200],
+        )
+        self._drafts[name] = contract.to_dict()
+
+    def _write_drafts(self) -> None:
+        target = self.config.emit_contracts
+        if target is None or not self._drafts:
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(
+                {
+                    "schema": "idensec.contracts/v1",
+                    "_comment": (
+                        "DRAFT. Generated from advertised tool schemas. Effects are "
+                        "empty because they cannot be inferred -- fill them in, check "
+                        "every parameter role, then load this with 'contracts' in the "
+                        "proxy config."
+                    ),
+                    "contracts": [self._drafts[k] for k in sorted(self._drafts)],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self._note(f"wrote {len(self._drafts)} draft contracts to {target}")
+
+    # -- audit -----------------------------------------------------------
+
+    def _flush_audit(self) -> None:
+        target = self.config.audit_file
+        if target is None:
+            return
+        records = list(self.session.audit)[self._audit_seen :]
+        if not records:
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record.to_dict(), sort_keys=True) + "\n")
+        self._audit_seen += len(records)
+
+    # -- plumbing --------------------------------------------------------
+
+    def bind_host_output(self, stream: IO[bytes]) -> None:
+        self._host_out = stream
+
+    def send_to_host(self, message: Message) -> None:
+        """Write one message to the host, serialised against the other pump."""
+        if self._host_out is not None:
+            with self._lock:
+                write_message(self._host_out, message)
+
+    def close(self) -> None:
+        with self._lock:
+            self._flush_audit()
+
+    def _respond(self, message: Message) -> None:
+        self.send_to_host(message)
+
+
+def run(
+    config: ProxyConfig,
+    *,
+    host_in: IO[bytes] | None = None,
+    host_out: IO[bytes] | None = None,
+    log: IO[bytes] | None = None,
+) -> int:
+    """Run the proxy until the host closes its side."""
+    if not config.server_command:
+        raise ValueError("config has no 'server' command to proxy")
+
+    host_in = host_in if host_in is not None else sys.stdin.buffer
+    host_out = host_out if host_out is not None else sys.stdout.buffer
+
+    proxy = Proxy(config, log=log)
+    proxy.bind_host_output(host_out)
+    proxy.announce()
+
+    server = subprocess.Popen(  # noqa: S603 - command comes from the operator's config
+        list(config.server_command),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=None,
+    )
+    assert server.stdin is not None and server.stdout is not None
+
+    def pump_inbound() -> None:
+        try:
+            for message in read_messages(server.stdout):  # type: ignore[arg-type]
+                forwarded = proxy.handle_inbound(message)
+                if forwarded is not None:
+                    proxy.send_to_host(forwarded)
+        except (BrokenPipeError, ValueError):
+            pass
+
+    reader = threading.Thread(target=pump_inbound, name="idensec-inbound", daemon=True)
+    reader.start()
+
+    try:
+        for message in read_messages(host_in):
+            forwarded = proxy.handle_outbound(message)
+            if forwarded is not None:
+                write_message(server.stdin, forwarded)
+    except (BrokenPipeError, ValueError):
+        pass
+    finally:
+        with contextlib.suppress(OSError):
+            server.stdin.close()
+        server.wait(timeout=10)
+        reader.join(timeout=5)
+        proxy.close()
+
+    return server.returncode or 0
