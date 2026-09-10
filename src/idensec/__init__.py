@@ -37,6 +37,7 @@ this does and does not defend against.
 """
 
 from .audit import AuditChain, AuditRecord
+from .budget import Budget, BudgetLedger, Meter
 from .contracts import (
     ContractRegistry,
     Effect,
@@ -62,12 +63,15 @@ __all__ = [
     "AttributionState",
     "AuditChain",
     "AuditRecord",
+    "Budget",
+    "BudgetLedger",
     "ContractRegistry",
     "Decision",
     "Disposition",
     "Effect",
     "Finding",
     "FindingCode",
+    "Meter",
     "Operand",
     "OperandKind",
     "OperandLedger",

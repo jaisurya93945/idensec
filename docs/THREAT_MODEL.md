@@ -225,12 +225,29 @@ expectations rather than production traffic; and a miss is a real weakening of
 defence in depth even though it is not a bypass — an unsealed untrusted value
 still fails attribution at the write boundary.
 
-### U04 · Aggregate harm
+### U04 · Aggregate harm — now partially mitigated
 
-Each call is admitted on its own. A sequence of individually authorised actions
-can add up to an outcome the principal would not have sanctioned — the founding
-brief's own example: every step of booking a flight is authorised, the total is
-not. Budgets and aggregate constraints are on the roadmap.
+*Was:* each call is admitted on its own, so individually authorised actions can
+sum to an outcome the principal never sanctioned. The founding brief's own
+example: *book me a flight under 50,000* is satisfied by each of three bookings
+at 20,000.
+
+*Now:* session budgets over three meters — call count, the sum of a numeric
+parameter, and the number of distinct destinations touched — scoped by tool or
+effect class. The example above is a test.
+
+*Residual, and the reason this stays in the unmitigated section rather than
+moving up:* a budget must be **stated**. IDENSEC cannot infer that "under
+50,000" was a limit rather than a preference, because that is intent, and
+provenance does not carry intent (U01). Someone has to write the budget down.
+Budgets also do not compose across sessions, so an agent restarted mid-task
+starts from zero.
+
+*Attacks on the mechanism itself are tested:* denied calls consume no budget,
+or an attacker would exhaust the principal's allowance with calls that were
+never going to succeed; repeating a destination costs nothing against a
+distinct-count limit; the agent is told nothing about the limit, since a budget
+it can read is a budget it can plan around.
 
 ### U05 · Non-identifier authority
 

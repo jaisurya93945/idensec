@@ -388,6 +388,57 @@ class TestObserveMode:
         assert by_tool["send_email"]["effects"] == [], "effects must never be inferred"
 
 
+class TestBudgets:
+    def test_an_aggregate_limit_is_enforced_across_calls(self, run_proxy) -> None:
+        """Each call is individually authorised; the third is not, in aggregate."""
+        run = run_proxy(
+            [
+                call(1, "send_email", {"to": "ana@corp.example", "subject": "s", "body": "b"}),
+                call(2, "send_email", {"to": "bo@corp.example", "subject": "s", "body": "b"}),
+                call(3, "send_email", {"to": "cy@corp.example", "subject": "s", "body": "b"}),
+            ],
+            task=(
+                "Mail the summary to ana@corp.example, bo@corp.example and "
+                "cy@corp.example."
+            ),
+            budgets=[
+                {
+                    "name": "recipients",
+                    "limit": 2,
+                    "meter": "distinct",
+                    "parameter": "to",
+                    "effects": ["network_egress"],
+                }
+            ],
+        )
+        assert not run.is_error(1)
+        assert not run.is_error(2)
+        assert run.is_error(3)
+        assert run.tools_called() == ["send_email", "send_email"]
+
+    def test_a_malformed_budget_refuses_to_start(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "bad.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "schema": "idensec.proxy/v1",
+                    "source": {"id": "x", "trust": "tool_untrusted"},
+                    "budgets": [{"name": "x", "limit": 5, "meter": "sum"}],
+                    "server": ["true"],
+                }
+            )
+        )
+        completed = subprocess.run(  # noqa: S603 - fixed test command
+            [sys.executable, "-m", "idensec.mcp", "--config", str(config_path)],
+            capture_output=True,
+            cwd=ROOT,
+            env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"},
+            timeout=30,
+        )
+        assert completed.returncode == 2
+        assert b"invalid budget" in completed.stderr
+
+
 class TestStartupLint:
     def test_contract_defects_are_reported_at_startup(self, run_proxy, tmp_path: Path) -> None:
         """Startup is the last moment anyone looks at a contract."""

@@ -200,7 +200,7 @@ host-written file the agent cannot touch. Full detail in
 | Denial-feedback leakage | **Bounded, not closed** |
 | Confidential paraphrase to an authorised destination | **Best-effort** |
 | Intent (an address the principal named to *forbid* it) | **Not addressed** |
-| Aggregate harm across individually authorised calls | **Not addressed** |
+| Aggregate harm across individually authorised calls | **Bounded, if you state a budget** |
 
 The full analysis, including the adversary model and the integrator assumptions
 that are yours to get right, is in

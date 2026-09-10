@@ -171,9 +171,10 @@ Stated so that nobody reads a guarantee into it:
 - **Intent.** Provenance answers *who wrote this value*, not *what they meant by
   it*. An address the principal named in order to forbid it is still an address
   the principal named. See [`LIMITATIONS.md`](LIMITATIONS.md).
-- **Aggregate consequence.** Each call is admitted on its own. A sequence of
-  individually authorised actions can still add up to something the principal
-  would not have sanctioned. Bounding aggregates is on the roadmap and is not
-  claimed today.
+- **Aggregate consequence, unless you state a budget.** The admission rule above
+  judges one call. Session budgets (`idensec.budget`) add the missing dimension —
+  call counts, sums over a numeric parameter, distinct destinations touched —
+  but they must be written down. IDENSEC cannot infer that "under 50,000" was a
+  limit rather than a preference, because that is intent.
 - **Correctness.** An authorised destination can still be the wrong one.
 - **Identity.** Deliberately. See §1.

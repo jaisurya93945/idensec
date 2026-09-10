@@ -48,6 +48,7 @@ class FindingCode(StrEnum):
     KIND_MISMATCH = "kind_mismatch"
     CONFIDENTIAL_EGRESS = "confidential_egress"
     CONFIDENTIAL_CONTEXT_EGRESS = "confidential_context_egress"
+    BUDGET_EXCEEDED = "budget_exceeded"
     SESSION_HALTED = "session_halted"
     UNDECLARED_PARAMETER = "undeclared_parameter"
 

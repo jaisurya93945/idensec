@@ -67,6 +67,7 @@ class Proxy:
             policy=config.policy,
             sources=[config.source],
             session_id=config.source.id,
+            budgets=config.budgets,
         )
         self._principal_id = f"{config.source.id}::principal"
         self._declare_principal()
@@ -98,7 +99,7 @@ class Proxy:
         self._note(
             f"proxying source '{config.source.id}' "
             f"trust={config.source.trust.name} policy={config.policy_name} "
-            f"contracts={len(config.contracts)}"
+            f"contracts={len(config.contracts)} budgets={len(config.budgets)}"
         )
         for warning in config.warnings():
             self._note(f"WARNING {warning}")

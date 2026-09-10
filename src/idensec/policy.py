@@ -76,6 +76,16 @@ class Policy:
     approval load that comes with it.
     """
 
+    budget_exceeded: Disposition = Disposition.DENY
+    """A session-level aggregate limit this call would exceed.
+
+    Denial rather than escalation by default: a budget is something the
+    principal or operator set deliberately, and quietly asking a human to
+    re-approve it on every breach is how limits stop meaning anything. The
+    supervised preset escalates instead, for workflows where a person is
+    genuinely present.
+    """
+
     denial_budget: int = 3
     """Denials tolerated before the session halts.
 
@@ -99,6 +109,7 @@ class Policy:
             "kind_mismatch",
             "confidential_egress",
             "confidential_context_egress",
+            "budget_exceeded",
         ):
             value = getattr(self, name)
             if not isinstance(value, Disposition):
@@ -112,6 +123,7 @@ SUPERVISED = Policy(
     unattributed_authority=Disposition.ESCALATE,
     unauthorised_authority=Disposition.ESCALATE,
     confidential_egress=Disposition.ESCALATE,
+    budget_exceeded=Disposition.ESCALATE,
 )
 """For workflows with a human in the loop.
 
@@ -135,6 +147,7 @@ OBSERVE = Policy(
     kind_mismatch=Disposition.ALLOW,
     confidential_egress=Disposition.ALLOW,
     confidential_context_egress=Disposition.ALLOW,
+    budget_exceeded=Disposition.ALLOW,
     denial_budget=-1,
     silent_denials=False,
 )

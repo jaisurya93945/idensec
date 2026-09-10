@@ -20,6 +20,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from .audit import AuditChain, AuditRecord
+from .budget import Budget, BudgetLedger
 from .contracts import ContractRegistry, Effect, ParameterContract, Role, ToolContract
 from .decision import Decision, Finding, FindingCode, Verdict
 from .kinds import DEFAULT_KINDS, classify, extract
@@ -58,6 +59,10 @@ a silent bypass.
 class Session:
     """One agent execution, mediated.
 
+    ``budgets`` bound what the session may do *in aggregate*. Every other check
+    here judges one call in isolation, which leaves individually-authorised
+    actions free to sum to an outcome the principal never sanctioned.
+
     ``max_observed_chars`` bounds how much content one session may take in.
     Exceeding it raises rather than silently forgetting, because a ledger that
     quietly drops observations stops being able to attribute what it forgot and
@@ -75,6 +80,7 @@ class Session:
         id_factory: Any | None = None,
         session_id: str = "",
         max_observed_chars: int = 4_000_000,
+        budgets: Iterable[Budget] = (),
     ) -> None:
         self.session_id = session_id
         self.policy = policy
@@ -92,6 +98,7 @@ class Session:
         )
         self.ledger.bind_source_lookup(self._source_labels)
         self.audit = AuditChain()
+        self.budgets = BudgetLedger(budgets)
         self._step = 0
         self._denials = 0
         self._halted = False
@@ -321,7 +328,24 @@ class Session:
                         Verdict.from_disposition(self.policy.confidential_context_egress)
                     )
 
-        return self._finalise(verdict, tool, step, resolved, tuple(findings), enforced)
+        for breach in self.budgets.check(contract, resolved):
+            findings.append(
+                Finding(
+                    code=FindingCode.BUDGET_EXCEEDED,
+                    detail=breach.describe(),
+                )
+            )
+            verdict = verdict.worse_of(
+                Verdict.from_disposition(self.policy.budget_exceeded)
+            )
+
+        decision = self._finalise(verdict, tool, step, resolved, tuple(findings), enforced)
+        if decision.allowed:
+            # Consumed by committed actions only. Charging denied calls would
+            # let an attacker exhaust the principal's allowance with calls that
+            # were never going to succeed.
+            self.budgets.commit(contract, resolved)
+        return decision
 
     # -- authority checking ----------------------------------------------
 
@@ -557,6 +581,7 @@ class Session:
             FindingCode.KIND_MISMATCH: self.policy.kind_mismatch,
             FindingCode.CONFIDENTIAL_EGRESS: self.policy.confidential_egress,
             FindingCode.CONFIDENTIAL_CONTEXT_EGRESS: self.policy.confidential_context_egress,
+            FindingCode.BUDGET_EXCEEDED: self.policy.budget_exceeded,
         }
         disposition = mapping.get(code)
         if disposition is None:
@@ -574,6 +599,7 @@ class Session:
                 self.policy.kind_mismatch,
                 self.policy.confidential_egress,
                 self.policy.confidential_context_egress,
+                self.policy.budget_exceeded,
             )
         )
 
@@ -647,5 +673,8 @@ class Session:
             findings=decision.findings,
             enforced=decision.enforced,
         )
+        contract = self.contracts.get(decision.tool)
+        if contract is not None:
+            self.budgets.commit(contract, decision.arguments)
         self._record(approved, {"approved_by": approver, "approval_note": note})
         return approved

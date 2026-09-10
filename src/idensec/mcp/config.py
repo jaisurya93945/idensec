@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..budget import Budget
 from ..contracts import ContractRegistry
 from ..labels import Sensitivity, Source, Trust
 from ..policy import OBSERVE, STRICT, SUPERVISED, Policy
@@ -63,6 +64,9 @@ class ProxyConfig:
     """Tool descriptions are server-supplied and therefore attacker territory
     (MCP tool poisoning). Sealing them is the default; turning it off is a
     deliberate weakening and is logged at startup."""
+
+    budgets: tuple[Budget, ...] = field(default_factory=tuple)
+    """Session-level aggregate limits. Every other check judges one call alone."""
 
     server_command: tuple[str, ...] = field(default_factory=tuple)
 
@@ -119,6 +123,7 @@ class ProxyConfig:
             audit_file=cls._optional(base, data.get("audit")),
             emit_contracts=cls._optional(base, data.get("emit_contracts")),
             seal_tool_descriptions=bool(data.get("seal_tool_descriptions", True)),
+            budgets=cls._budgets(data.get("budgets", ())),
             server_command=tuple(data.get("server", ())),
         )
 
@@ -132,6 +137,15 @@ class ProxyConfig:
         except ValueError as exc:
             raise ConfigError(f"config is not valid JSON: {exc}") from exc
         return cls.from_dict(data, base=config_path.parent)
+
+    @staticmethod
+    def _budgets(raw: Any) -> tuple[Budget, ...]:
+        if not isinstance(raw, (list, tuple)):
+            raise ConfigError("'budgets' must be a list")
+        try:
+            return tuple(Budget.from_dict(entry) for entry in raw)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ConfigError(f"invalid budget: {exc}") from exc
 
     @staticmethod
     def _resolve(base: Path, value: Any) -> Path:

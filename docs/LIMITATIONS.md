@@ -91,11 +91,15 @@ default; domain identifiers (tenant ids, cluster names, internal ticket formats)
 must be registered with `register_kind()`. Coverage against real-world tool
 output is **unmeasured**.
 
-### 4.4 Each call is judged alone
+### 4.4 Each call is judged alone unless a budget says otherwise
 
-A sequence of individually authorised actions can add up to an outcome the
-principal never sanctioned — the founding brief's own flight-booking example.
-Budgets and aggregate constraints are on the roadmap and are not claimed today.
+The admission rule judges one call. Session budgets close the founding brief's
+flight-booking example — three individually authorised bookings at 20,000
+against a 50,000 cap — over call counts, numeric sums and distinct destinations.
+
+What remains: **a budget must be stated.** IDENSEC cannot infer that "under
+50,000" was a limit rather than a preference; that is intent, and §4.1 applies.
+Budgets are also per-session, so an agent restarted mid-task starts from zero.
 
 ### 4.5 Cross-process provenance is not implemented
 
