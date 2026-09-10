@@ -37,7 +37,7 @@ additional engineering makes the project more true.
 
 | | Item | Gap it closes |
 | --- | --- | --- |
-| `later` | **Counterfactual provenance** for denial-induced influence, following ARM (arXiv 2604.04035). | P01 — the denial channel is bounded, not closed (ADR-0009). |
+| `later` | **Counterfactual provenance** for denial-induced influence, following ARM (arXiv 2604.04035). | P01. Capacity is now bounded, *measured* (`denial_channel_bits`) and optionally contained; the general fix remains a larger build. |
 | `done` | **Aggregate constraints** — session budgets over calls, sums and distinct destinations | U04. The founding brief's flight example is now a test. Deployable through proxy config. Residual: a budget must be *stated*, because "under 50,000" being a limit rather than a preference is intent, and provenance does not carry intent. |
 | `later` | **Portable label format** for cross-process provenance between sub-agents. | Section 4.5 of the limitations; also the natural specification to standardise. |
 | `later` | **Token index over observed text.** | The linear attribution walk; needed before ~10 000-step sessions ([`BENCHMARKS.md`](BENCHMARKS.md)). |

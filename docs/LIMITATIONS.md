@@ -108,11 +108,17 @@ with its own context — IDENSEC sees only what that sub-agent returns. The soun
 option today is to label sub-agents conservatively. A portable label format is
 on the roadmap. See [`DELEGATION_MODEL.md`](DELEGATION_MODEL.md).
 
-### 4.6 The denial channel is bounded, not closed
+### 4.6 The denial channel is bounded, measured, not closed
 
-Denials leak roughly one bit each. The budget bounds the total; it does not
-eliminate the channel. ARM's counterfactual provenance is the correct fix and is
-a substantially larger build (ADR-0009).
+Denials leak roughly one bit each. The budget bounds the total,
+`Session.denial_channel_bits` reports it, and `denial_influenced_egress` will
+escalate egress after any denial if you turn it on.
+
+None of that *closes* the channel. What narrows it in practice is that the bits
+still have to leave, and an attacker's own destination is never authoritative —
+so completing the leak needs a channel the principal chose. That is a real
+narrowing, and it leans entirely on the source labels being right (A1). ARM's
+counterfactual provenance is the correct general fix (ADR-0009).
 
 ---
 

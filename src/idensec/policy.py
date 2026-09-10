@@ -76,6 +76,24 @@ class Policy:
     approval load that comes with it.
     """
 
+    denial_influenced_egress: Disposition = Disposition.ALLOW
+    """Egress after a denial has occurred in this session.
+
+    The denial-feedback channel (ARM, arXiv 2604.04035) is a covert channel: the
+    agent probes a protected action, learns roughly one bit from the refusal,
+    and encodes it into a later call. Content-free denials remove the *content*
+    channel and the denial budget bounds the *number* of probes, but neither
+    closes it.
+
+    This is the sound, coarse option: once any denial has occurred, treat every
+    subsequent egress call as potentially carrying the inferred bits. Off by
+    default because it over-triggers -- one denial constrains the rest of the
+    session -- and because within this model the exfiltration leg usually fails
+    anyway: the attacker's own destinations are never authoritative, so the bits
+    have to travel through a channel the principal chose. Turn it on where that
+    reasoning is not good enough.
+    """
+
     budget_exceeded: Disposition = Disposition.DENY
     """A session-level aggregate limit this call would exceed.
 
@@ -110,6 +128,7 @@ class Policy:
             "confidential_egress",
             "confidential_context_egress",
             "budget_exceeded",
+            "denial_influenced_egress",
         ):
             value = getattr(self, name)
             if not isinstance(value, Disposition):
@@ -148,6 +167,7 @@ OBSERVE = Policy(
     confidential_egress=Disposition.ALLOW,
     confidential_context_egress=Disposition.ALLOW,
     budget_exceeded=Disposition.ALLOW,
+    denial_influenced_egress=Disposition.ALLOW,
     denial_budget=-1,
     silent_denials=False,
 )

@@ -49,6 +49,7 @@ class FindingCode(StrEnum):
     CONFIDENTIAL_EGRESS = "confidential_egress"
     CONFIDENTIAL_CONTEXT_EGRESS = "confidential_context_egress"
     BUDGET_EXCEEDED = "budget_exceeded"
+    DENIAL_INFLUENCED_EGRESS = "denial_influenced_egress"
     SESSION_HALTED = "session_halted"
     UNDECLARED_PARAMETER = "undeclared_parameter"
 

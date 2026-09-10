@@ -166,14 +166,41 @@ rewrite the whole chain from genesis. Ship records off-host for that threat.
 learns from the refusal, then exfiltrates the inferred bit through a later
 benign call. Data-flow provenance does not capture this, because the leak is
 causal rather than a flow.
-*IDENSEC:* denial messages to the agent are fixed and content-free, removing the
-*content* channel; the denial budget bounds the number of probes; exhausting it
-halts the session.
-*Residual:* **real and unclosed.** Roughly one bit per probe, times the budget.
-ARM's counterfactual-provenance approach is the correct fix and is a
-substantially larger build. On the roadmap; not claimed as solved.
-*Test:* `TestDenialOracle` (2 cases, the second asserting the bound rather than
-absence of the channel).
+
+*IDENSEC:* three controls, in increasing strength.
+
+1. **Content-free denials** remove the *content* channel — the agent is told
+   nothing about the operand, the parameter, or the reason.
+2. **The denial budget** bounds the *number* of probes; exhausting it halts the
+   session.
+3. **Capacity is reported.** `Session.denial_channel_bits` states the upper
+   bound on what the channel may have carried, and every egress call after a
+   denial carries a finding recording it. An unquantified covert channel is one
+   nobody can reason about.
+
+*The refinement that makes the default tolerable:* within this model, a probe
+is only half an attack. **The inferred bits still have to leave**, and the
+attacker's own destinations are never authoritative — so the exfiltration leg
+fails on the same rule as everything else. Completing the leak requires a
+channel the *principal* chose, which narrows it to the confidentiality gap
+already documented in P02 rather than being a separate hole. This is a genuine
+narrowing of ARM's threat model under our constraints, not a claim to have
+solved it; it depends on the attacker having no authorised egress channel they
+can read, which is exactly assumption A1.
+
+*For deployments where that reasoning is not good enough:*
+`denial_influenced_egress` escalates every egress call once any denial has
+occurred. Sound, coarse, off by default because one denial then constrains the
+rest of the session.
+
+*Residual:* **real and unclosed.** Roughly one bit per probe, times the budget,
+through an authorised channel. ARM's counterfactual-provenance graph is the
+correct general fix and is a substantially larger build. On the roadmap; not
+claimed as solved.
+
+*Test:* `TestDenialOracle` — six cases covering the content-free message, the
+bound, capacity reporting, the opt-in control, non-firing on clean sessions, and
+the exfiltration leg failing.
 
 ### P02 · Confidential exfiltration to an authorised destination
 

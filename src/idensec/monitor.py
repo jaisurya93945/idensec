@@ -168,6 +168,18 @@ class Session:
     def denials(self) -> int:
         return self._denials
 
+    @property
+    def denial_channel_bits(self) -> int:
+        """Upper bound on what the denial channel may have leaked, in bits.
+
+        Each denial tells the agent one thing: that the call was refused. With
+        content-free denials that is approximately one bit, so the session's
+        denial count bounds the total. Reported rather than hidden, because an
+        unquantified covert channel is one nobody can reason about -- and the
+        denial budget is what keeps this number finite.
+        """
+        return self._denials
+
     def _next_step(self) -> int:
         self._step += 1
         return self._step
@@ -293,6 +305,21 @@ class Session:
                     sensitivity = max(sensitivity, attribution.sensitivity)
                 for finding in leaf_findings:
                     verdict = verdict.worse_of(self._disposition_for(finding.code))
+
+        if contract.can_egress and self._denials:
+            findings.append(
+                Finding(
+                    code=FindingCode.DENIAL_INFLUENCED_EGRESS,
+                    detail=(
+                        f"{self._denials} denial(s) have occurred in this session; "
+                        f"at most ~{self._denials} bit(s) may have been inferred from "
+                        "them and could be encoded into this call"
+                    ),
+                )
+            )
+            verdict = verdict.worse_of(
+                Verdict.from_disposition(self.policy.denial_influenced_egress)
+            )
 
         if contract.can_egress:
             principal_directed = bool(authority_attributions) and all(
@@ -582,6 +609,7 @@ class Session:
             FindingCode.CONFIDENTIAL_EGRESS: self.policy.confidential_egress,
             FindingCode.CONFIDENTIAL_CONTEXT_EGRESS: self.policy.confidential_context_egress,
             FindingCode.BUDGET_EXCEEDED: self.policy.budget_exceeded,
+            FindingCode.DENIAL_INFLUENCED_EGRESS: self.policy.denial_influenced_egress,
         }
         disposition = mapping.get(code)
         if disposition is None:
@@ -600,6 +628,7 @@ class Session:
                 self.policy.confidential_egress,
                 self.policy.confidential_context_egress,
                 self.policy.budget_exceeded,
+                self.policy.denial_influenced_egress,
             )
         )
 
