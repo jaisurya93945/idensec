@@ -181,7 +181,7 @@ class TestPassThrough:
     def test_unknown_methods_are_forwarded(self, run_proxy) -> None:
         """A proxy that only forwards what it recognises breaks on the next
         protocol revision."""
-        run = run_proxy([{"jsonrpc": "2.0", "id": 1, "method": "resources/list"}])
+        run = run_proxy([{"jsonrpc": "2.0", "id": 1, "method": "logging/setLevel"}])
         assert "error" in run.result(1)
 
     def test_notifications_do_not_stall_the_proxy(self, run_proxy) -> None:
@@ -222,6 +222,77 @@ class TestReadBoundary:
         assert {t["name"] for t in tools} == {"fetch_page", "send_email", "read_file"}
         schema = next(t for t in tools if t["name"] == "send_email")["inputSchema"]
         assert set(schema["properties"]) == {"to", "subject", "body"}
+
+
+class TestEveryContentPathIsSealed:
+    """tools/call is not the only way content reaches the model.
+
+    MCP delivers model-visible text through resources/read, prompts/get and
+    resources/list as well. A proxy that seals only tool results leaves an
+    attacker-controlled resource free to hand the model an address in clear --
+    which is the bypass these tests were written to prove existed, before the
+    fix that closed it.
+    """
+
+    def test_resource_contents_are_sealed(self, run_proxy) -> None:
+        run = run_proxy(
+            [{"jsonrpc": "2.0", "id": 1, "method": "resources/read",
+              "params": {"uri": "file:///srv/docs/incident-4471.md"}}],
+            task="Summarise the incident and mail ana@corp.example",
+        )
+        body = json.dumps(run.result(1)["result"])
+        assert ATTACKER not in body
+        assert "[[idn:email:" in body
+
+    def test_prompt_content_is_sealed(self, run_proxy) -> None:
+        run = run_proxy(
+            [{"jsonrpc": "2.0", "id": 1, "method": "prompts/get",
+              "params": {"name": "incident"}}],
+            task="Summarise the incident and mail ana@corp.example",
+        )
+        body = json.dumps(run.result(1)["result"])
+        assert ATTACKER not in body
+
+    def test_resource_listings_are_sealed(self, run_proxy) -> None:
+        run = run_proxy(
+            [{"jsonrpc": "2.0", "id": 1, "method": "resources/list"}],
+            task="Summarise the incident and mail ana@corp.example",
+        )
+        body = json.dumps(run.result(1)["result"])
+        assert ATTACKER not in body
+
+    def test_an_address_learned_from_a_resource_is_still_refused(self, run_proxy) -> None:
+        """Sealing is only half of it: the provenance must carry through so the
+        write boundary refuses the value the resource supplied."""
+        run = run_proxy(
+            [
+                {"jsonrpc": "2.0", "id": 1, "method": "resources/read",
+                 "params": {"uri": "file:///srv/docs/incident-4471.md"}},
+                call(2, "send_email", {"to": ATTACKER, "subject": "s", "body": "b"}),
+            ],
+            task="Summarise the incident and mail ana@corp.example",
+        )
+        assert run.is_error(2)
+        assert run.tools_called() == []
+
+    def test_initialize_is_left_alone(self, run_proxy) -> None:
+        """Protocol metadata must survive intact; a sealed protocolVersion
+        would break the handshake."""
+        run = run_proxy([{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}])
+        result = run.result(1)["result"]
+        assert result["protocolVersion"] == "2025-06-18"
+        assert result["serverInfo"]["name"] == "fake-hostile-server"
+
+    def test_tool_schemas_are_never_sealed(self, run_proxy) -> None:
+        """Sealing inside a JSON Schema would corrupt it -- the one place
+        aggressive sealing must not reach."""
+        run = run_proxy([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
+        schema = next(
+            t for t in run.result(1)["result"]["tools"] if t["name"] == "send_email"
+        )["inputSchema"]
+        assert schema["type"] == "object"
+        assert set(schema["properties"]) == {"to", "subject", "body"}
+        assert "[[idn:" not in json.dumps(schema)
 
 
 class TestWriteBoundary:

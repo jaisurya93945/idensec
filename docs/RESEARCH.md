@@ -366,6 +366,35 @@ concrete standards contribution this project could make. Untested with anyone.
 
 ---
 
+## Thread 3c — Self-attack on the proxy (2026-09-10)
+
+`EXPERIMENT` — Red-teamed our own MCP proxy by asking which protocol messages
+can carry attacker-controlled text into a model's context, rather than which
+ones we had thought to handle.
+
+`RESULT` — **A real bypass in our own code.** The proxy sealed `tools/call`
+results and `tools/list` descriptions. It did not seal `resources/read`,
+`prompts/get` or `resources/list`, all of which deliver server-supplied text to
+the model. An attacker controlling a resource could hand the model an address in
+clear, defeating the read boundary entirely for that path. Demonstrated with
+failing tests before the fix.
+
+`INFERENCE` — The root cause was the *shape* of the design, not a missed case.
+Enumerating content-bearing methods is a losing game against a protocol that
+keeps adding them. The default was inverted: seal every result, and name the two
+exceptions where a handle would break something structural (the `initialize`
+handshake, and JSON Schemas inside `tools/list`).
+
+`FACT` — This is safe to apply that broadly because sealing is a no-op on text
+containing no operands: prose passes through byte-for-byte, so "seal
+everything" costs nothing on the messages that carry no identifiers.
+
+**Decision:** allowlist the exceptions rather than the targets, here and in any
+future transport. Recorded because the same mistake is available in every
+adapter we have not written yet.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

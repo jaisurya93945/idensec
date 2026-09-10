@@ -39,7 +39,7 @@ getting any of them wrong is a total bypass:
 | --- | --- |
 | A1 | Sources are labelled honestly. Labelling a web fetcher `TOOL_TRUSTED` and authoritative for `email` hands the attacker the recipient field. |
 | A2 | Contracts mark authority-bearing parameters correctly. A recipient marked `PAYLOAD` is unprotected. |
-| A3 | All untrusted content passes through `observe()` before reaching the model. Content that bypasses the read boundary is never sealed. |
+| A3 | All untrusted content passes through `observe()` before reaching the model. Content that bypasses the read boundary is never sealed. The MCP proxy enforces this by sealing *every* result and allowlisting the two exceptions, after a self-attack found `resources/read` and `prompts/get` delivering content unsealed ([`RESEARCH.md`](RESEARCH.md) Thread 3c). |
 | A4 | The **resolved** arguments from an allowed `Decision` are what get executed. |
 | A5 | Effects are declared. An egress tool not marked `NETWORK_EGRESS` escapes the confidentiality rules. |
 

@@ -3,16 +3,33 @@
 The proxy sits between an MCP host and one MCP server and mediates exactly the
 two boundaries IDENSEC needs, both of which the protocol already provides:
 
-* ``tools/call`` **result** -> the read boundary. Text content is sealed before
-  it reaches the model.
 * ``tools/call`` **request** -> the write boundary. Arguments are attributed and
   the call is admitted, denied, or escalated.
-* ``tools/list`` **result** -> tool descriptions are sealed (they are
-  server-supplied, which makes them the MCP tool-poisoning path) and draft
-  contracts can be emitted from their schemas.
+* **every result** -> the read boundary. Text is sealed before it reaches the
+  model.
 
-Everything else is forwarded untouched. A proxy that only forwards what it
-recognises breaks on the next protocol revision.
+That second rule is deliberately stated as *every* result rather than as a list
+of methods. ``tools/call`` is not the only path by which content reaches a
+model: ``resources/read``, ``prompts/get`` and ``resources/list`` all carry
+server-supplied text, and an earlier version of this proxy sealed only tool
+results, which left an attacker-controlled resource free to hand the model an
+address in clear. Enumerating the content-bearing methods is a losing game
+against a protocol that keeps adding them, so the default is inverted: seal
+everything, and name the exceptions.
+
+Sealing is safe to apply this broadly because it is a no-op on text containing
+no operands -- prose passes through byte-for-byte. The exceptions exist for the
+two places where a handle would break something structural:
+
+* ``initialize`` -- protocol metadata. A sealed ``protocolVersion`` breaks the
+  handshake.
+* ``tools/list`` -- tool names and JSON Schemas must survive intact, so only the
+  human-readable ``description`` is sealed. That is also where tool poisoning
+  lives, so it is the field that most needs it.
+
+Requests other than ``tools/call``, and messages we do not recognise at all, are
+forwarded untouched. A proxy that only forwards what it recognises breaks on the
+next protocol revision.
 
 **The proxy is not a trust boundary against the host.** It protects the
 *principal* from content the agent consumes. A host that chooses not to route
@@ -184,28 +201,32 @@ class Proxy:
 
         tool = self._pending.pop(message.id, None)
         if tool is not None:
-            return self._seal_tool_result(message, result)
+            return self._seal_result(message, result, path=f"{tool}.result")
         if "tools" in result and isinstance(result["tools"], list):
             return self._handle_tools_list(message, result)
-        return message
-
-    def _seal_tool_result(self, message: Message, result: dict[str, Any]) -> Message:
-        """Seal the text a tool returned before the model sees it."""
-        content = result.get("content")
-        if not isinstance(content, list):
+        if self._is_protocol_metadata(result):
             return message
-        sealed_blocks = []
-        for index, block in enumerate(content):
-            if isinstance(block, dict) and isinstance(block.get("text"), str):
-                with self._lock:
-                    sealed = self.session.observe(
-                        self.config.source.id, block["text"], path=f"content[{index}]"
-                    )
-                sealed_blocks.append({**block, "text": sealed})
-            else:
-                sealed_blocks.append(block)
+        return self._seal_result(message, result, path="result")
+
+    @staticmethod
+    def _is_protocol_metadata(result: dict[str, Any]) -> bool:
+        """Recognise the handshake, whose fields must survive intact."""
+        return "protocolVersion" in result or "capabilities" in result
+
+    def _seal_result(
+        self, message: Message, result: dict[str, Any], *, path: str
+    ) -> Message:
+        """Seal every string in a result before the model sees it.
+
+        The whole structure is walked rather than a known field, so field-level
+        provenance is recorded (``result.contents[0].text``) and no new
+        content-bearing shape can appear in a future protocol revision and slip
+        past unsealed.
+        """
+        with self._lock:
+            sealed = self.session.observe(self.config.source.id, result, path=path)
         payload = dict(message.payload)
-        payload["result"] = {**result, "content": sealed_blocks}
+        payload["result"] = sealed
         return Message(payload)
 
     def _handle_tools_list(self, message: Message, result: dict[str, Any]) -> Message:

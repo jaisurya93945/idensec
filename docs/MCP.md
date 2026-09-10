@@ -144,13 +144,19 @@ Point your MCP host at the proxy instead of the server:
 | Message | Treatment |
 | --- | --- |
 | `tools/call` request | Attributed and admitted. On denial the call **never reaches the server**, and the host receives a tool result with `isError` and a content-free message. On allow, arguments are rewritten to resolved values. |
-| `tools/call` result | Text content is sealed. Prose survives; identifiers become handles. |
-| `tools/list` result | Descriptions sealed (server-supplied ⇒ attacker territory). Names and schemas are **never** rewritten. Optionally drafts contracts. |
-| everything else | Forwarded untouched. |
+| **every result** | Text is sealed. Prose survives byte-for-byte; identifiers become handles. Field-level provenance is recorded (`result.contents[0].text`). |
+| `tools/list` result | Exception: descriptions sealed (server-supplied ⇒ attacker territory), names and JSON Schemas **never** rewritten, since a handle inside a schema would corrupt it. Optionally drafts contracts. |
+| `initialize` result | Exception: protocol metadata passes through. A sealed `protocolVersion` breaks the handshake. |
+| other requests, unknown messages | Forwarded untouched. A proxy that only forwards what it recognises breaks on the next protocol revision. |
 
-That last row is load-bearing. A proxy that only forwards what it recognises
-breaks on the next protocol revision; this one inspects two methods and passes
-the rest through.
+**Why "every result" and not a list of methods.** `tools/call` is not the only
+path by which content reaches a model — `resources/read`, `prompts/get` and
+`resources/list` all carry server-supplied text. An earlier version of this
+proxy sealed only tool results, which left an attacker-controlled *resource*
+free to hand the model an address in clear. Enumerating content-bearing methods
+is a losing game against a protocol that keeps adding them, so the default is
+inverted: seal everything, name the exceptions. It is safe to apply this broadly
+because sealing is a no-op on text containing no operands.
 
 Startup warnings are printed to stderr for every configuration that is legal but
 weakens the guarantee — observe mode, no task file, no contracts, unsealed
