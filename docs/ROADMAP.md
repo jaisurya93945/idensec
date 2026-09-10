@@ -25,7 +25,7 @@ additional engineering makes the project more true.
 | | Item | Notes |
 | --- | --- | --- |
 | `done` | **MCP proxy** | Built: stdio transport, both boundaries, contract drafting, observe mode, audit to JSONL. 19 end-to-end tests against a hostile server over real pipes. See [`MCP.md`](MCP.md). Surfaced a protocol-level finding — MCP has no trusted channel for principal intent ([`RESEARCH.md`](RESEARCH.md) Thread 3b). |
-| `next` | **Contract linter** | Flags parameters that look authority-bearing but are declared `PAYLOAD`, tools with egress effects and no authority parameters, and sources authoritative for kinds no contract uses. Aimed squarely at the most likely real-world failure (threat model U06). |
+| `done` | **Contract linter** | Built: 11 checks over contracts and source grants, three severities, JSON output, and the same checks run at proxy startup. Dogfooded in CI against our own shipped contracts. |
 | `next` | **A seeded contract corpus** for common MCP servers, versioned and reviewable. | The one candidate moat that grows with adoption ([`COMPETITORS.md`](COMPETITORS.md) §4). |
 | `next` | **Streamable HTTP transport** for the proxy | Same interception points as stdio; the remaining half of MCP deployments. |
 | `next` | **Propose a principal-intent field to the MCP spec** | The concrete standards contribution this project can make, and a prerequisite for *any* containment design deploying cleanly over MCP. |

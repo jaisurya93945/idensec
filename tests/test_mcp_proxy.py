@@ -388,6 +388,68 @@ class TestObserveMode:
         assert by_tool["send_email"]["effects"] == [], "effects must never be inferred"
 
 
+class TestStartupLint:
+    def test_contract_defects_are_reported_at_startup(self, run_proxy, tmp_path: Path) -> None:
+        """Startup is the last moment anyone looks at a contract."""
+        broken = tmp_path / "broken.json"
+        broken.write_text(
+            json.dumps(
+                {
+                    "schema": "idensec.contracts/v1",
+                    "contracts": [
+                        {
+                            "tool": "send_email",
+                            "effects": ["network_egress"],
+                            "default_role": "authority",
+                            "parameters": {"to": {"role": "payload"}},
+                        }
+                    ],
+                }
+            )
+        )
+        run = run_proxy(
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}],
+            task="Mail ana@corp.example",
+            contracts=str(broken),
+        )
+        assert "contract lint" in run.stderr
+        assert "authority-name-downgraded" in run.stderr
+
+    def test_a_clean_contract_set_produces_no_lint_noise(self, run_proxy) -> None:
+        """A linter that cries wolf gets switched off."""
+        run = run_proxy(
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}],
+            task="Mail ana@corp.example",
+        )
+        assert "contract lint" not in run.stderr
+
+    def test_lint_findings_do_not_prevent_startup(self, run_proxy, tmp_path: Path) -> None:
+        """The linter reasons from names; a false positive must not be able to
+        take a deployment down."""
+        broken = tmp_path / "broken.json"
+        broken.write_text(
+            json.dumps(
+                {
+                    "schema": "idensec.contracts/v1",
+                    "contracts": [
+                        {
+                            "tool": "send_email",
+                            "effects": ["network_egress"],
+                            "default_role": "authority",
+                            "parameters": {"to": {"role": "payload"}},
+                        }
+                    ],
+                }
+            )
+        )
+        run = run_proxy(
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}],
+            task="Mail ana@corp.example",
+            contracts=str(broken),
+        )
+        assert run.result(1)["result"]["serverInfo"]["name"] == "fake-hostile-server"
+
+
 class TestAudit:
     def test_decisions_are_written_to_the_audit_log(self, run_proxy, tmp_path: Path) -> None:
         run = run_proxy(

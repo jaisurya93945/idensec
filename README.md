@@ -163,11 +163,19 @@ earlier capability defences — nobody wants to hand-write a policy per tool:
 python -m idensec.mcp --config docs.json --emit-contracts contracts/docs.json
 ```
 
-That drafts contracts from the server's own advertised schemas. It marks
+```bash
+python -m idensec.lint contracts/docs.json --config docs.json
+```
+
+The first drafts contracts from the server's own advertised schemas. It marks
 parameter roles and deliberately leaves `effects` empty, because effects cannot
 be read off a schema and guessing that a tool is read-only would be the most
-dangerous inference in the system. Complete the drafts, run `observe` mode
-against real traffic to see what strict *would* have denied, then switch it on.
+dangerous inference in the system. The second catches the mistakes that make a
+contract a *silent* bypass — a recipient declared as content, an egress tool
+with no destination to check — and the proxy runs the same checks at startup.
+
+Complete the drafts, run `observe` mode against real traffic to see what strict
+*would* have denied, then switch it on.
 
 **One caveat worth reading before you deploy:** MCP has no trusted channel for
 the principal's instruction, and the agent cannot be asked for it — an injected

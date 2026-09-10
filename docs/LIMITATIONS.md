@@ -116,7 +116,7 @@ a substantially larger build (ADR-0009).
 
 | Limit | Detail |
 | --- | --- |
-| **Integrator assumptions** | Mislabelling a source or a parameter is a total bypass, and IDENSEC cannot detect either. This is the most likely way a real deployment fails. A contract linter is on the roadmap. |
+| **Integrator assumptions** | Mislabelling a source or a parameter is a total bypass. `idensec.lint` catches the mechanically detectable subset and runs at proxy startup, but it reasons from names and cannot know that *your* `ref` parameter picks a production database. Still the most likely way a real deployment fails. |
 | **Availability** | Sessions halt on denial-budget exhaustion and raise on intake-budget exhaustion. Failing closed is right for a security control, but it *is* a denial-of-service surface and should not be described as free. |
 | **Session scale** | Attribution is linear in observations: ~3 ms per decision at 1 000 observations. Fine for current agent session lengths; needs an index before 10 000. See [`BENCHMARKS.md`](BENCHMARKS.md). |
 | **Intake budget** | 4 MB of observed content per session by default. Exceeding it raises rather than silently forgetting, because a ledger that forgets fails *open* on everything it forgot. |

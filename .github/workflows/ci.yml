@@ -61,6 +61,10 @@ jobs:
       - name: Doctests
         run: python -c "import doctest, idensec, sys; sys.exit(bool(doctest.testmod(idensec).failed))"
 
+      - name: Contract linter is clean on shipped examples
+        # Dogfooding: if our own contracts do not pass, nobody else's will.
+        run: python -m idensec.lint examples/mcp/filesystem-contracts.json
+
       - name: Example runs
         run: python examples/summarise_and_mail.py
 

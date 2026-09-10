@@ -70,7 +70,23 @@ python -m idensec.mcp --config examples/mcp/filesystem.json \
 that an unknown tool is read-only would be the most dangerous inference in the
 system. Fill them in, and check every `authority` role the deriver guessed.
 
-**3. Run in observe mode against real traffic.** Nothing is enforced; every
+**3. Lint them.** A wrong contract is a *silent* bypass — the monitor allows the
+call and raises no finding, because as far as it knows nothing authority-bearing
+was involved.
+
+```bash
+python -m idensec.lint contracts/filesystem.json --config examples/mcp/filesystem.json
+```
+
+It catches downgraded authority parameters, egress tools with no destination to
+check, permissive `default_role`, misspelled operand kinds, and drafts that were
+never completed. The proxy runs the same checks at startup and prints anything
+it finds to stderr — it does not refuse to start, because the linter reasons
+from names and a false positive must not be able to take a deployment down.
+
+A clean run means *no known-bad patterns*, never *this contract is correct*.
+
+**4. Run in observe mode against real traffic.** Nothing is enforced; every
 decision is recorded. Read the audit log and see what a strict policy *would*
 have denied.
 
@@ -78,7 +94,7 @@ have denied.
 { "policy": "observe", "audit": "idensec-audit.jsonl" }
 ```
 
-**4. Switch to `strict`** once the denials in the log are all ones you agree
+**5. Switch to `strict`** once the denials in the log are all ones you agree
 with.
 
 ---

@@ -31,6 +31,7 @@ from typing import IO, Any
 
 from ..contracts import derive_contract
 from ..decision import Verdict
+from ..lint import Severity, lint_registry
 from ..monitor import Session
 from .config import ProxyConfig
 from .jsonrpc import Message, error_result, read_messages, write_message
@@ -101,6 +102,35 @@ class Proxy:
         )
         for warning in config.warnings():
             self._note(f"WARNING {warning}")
+        self._lint()
+
+    def _lint(self) -> None:
+        """Report contract defects before serving traffic.
+
+        A wrong contract is a silent bypass -- the monitor allows the call and
+        raises no finding, because as far as it knows nothing authority-bearing
+        was involved. Startup is the last moment anyone will look, so errors are
+        surfaced here rather than left for an audit nobody runs.
+
+        This does not refuse to start. The linter reasons from names and cannot
+        know your system, so a false positive must not be able to take a
+        deployment down; the operator decides.
+        """
+        if not len(self.config.contracts):
+            return
+        diagnostics = lint_registry(self.config.contracts, [self.config.source])
+        problems = [d for d in diagnostics if d.severity >= Severity.WARNING]
+        if not problems:
+            return
+        errors = sum(1 for d in problems if d.severity is Severity.ERROR)
+        self._note(
+            f"contract lint: {errors} error(s), {len(problems) - errors} warning(s). "
+            "Run 'python -m idensec.lint <contracts>' for the full report."
+        )
+        for diagnostic in problems[:10]:
+            self._note(f"  {diagnostic.render()}")
+        if len(problems) > 10:
+            self._note(f"  ... and {len(problems) - 10} more")
 
     # -- host -> server --------------------------------------------------
 

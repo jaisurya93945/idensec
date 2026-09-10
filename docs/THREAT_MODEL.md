@@ -234,10 +234,17 @@ is usually a denial; that is a blunt instrument, not a solution.
 
 ### U06 · The integrator assumptions (A1–A5)
 
-Mislabelling a source or a parameter is a total bypass and IDENSEC cannot detect
-it. A contract linter and a source-labelling review checklist are on the roadmap.
-This is the most likely way a real deployment fails, and it is not a hypothetical
-— it is how every policy system fails.
+Mislabelling a source or a parameter is a total bypass. `idensec.lint` now
+catches the mechanically detectable subset — a recipient declared `PAYLOAD`, an
+egress tool with no destination to check, a permissive `default_role`, a
+misspelled operand kind, an uncompleted draft, a source trusted as a principal —
+and the proxy runs the same checks at startup.
+
+It remains **unmitigated**, because the linter reasons from names, types and
+effects. It cannot know that *your* `ref` parameter decides which production
+database gets written. A clean lint means "no known-bad patterns", never "this
+contract is correct". This is still the most likely way a real deployment
+fails.
 
 ### U07 · Availability
 
