@@ -23,8 +23,9 @@ No model in the decision path. No network calls. No runtime dependencies. The
 same trace always produces the same verdict.
 
 > **Status: 0.1, early and unreviewed.** The security property is tested against
-> 46 attacks; the *utility* cost has not been measured, and that is the number
-> that decides whether this approach is worth anything.
+> 49 attacks plus 19 end-to-end proxy tests; the *utility* cost has not been
+> measured, and that is the number that decides whether this approach is worth
+> anything.
 > [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) is not a formality — read it.
 
 ---
@@ -138,6 +139,44 @@ python3 examples/summarise_and_mail.py
 
 ---
 
+## Deploy it as an MCP proxy
+
+MCP already carries both boundaries, so a host gains enforcement without any
+application change — point it at the proxy instead of the server:
+
+```json
+{ "mcpServers": { "docs": {
+    "command": "python",
+    "args": ["-m", "idensec.mcp", "--config", "/etc/idensec/docs.json"]
+}}}
+```
+
+`tools/call` results are sealed on the way in, `tools/call` arguments are
+attributed on the way out, `tools/list` descriptions are sealed because they are
+server-supplied and therefore the tool-poisoning path, and everything else is
+forwarded untouched.
+
+Onboarding is designed around the thing that reportedly killed adoption of
+earlier capability defences — nobody wants to hand-write a policy per tool:
+
+```bash
+python -m idensec.mcp --config docs.json --emit-contracts contracts/docs.json
+```
+
+That drafts contracts from the server's own advertised schemas. It marks
+parameter roles and deliberately leaves `effects` empty, because effects cannot
+be read off a schema and guessing that a tool is read-only would be the most
+dangerous inference in the system. Complete the drafts, run `observe` mode
+against real traffic to see what strict *would* have denied, then switch it on.
+
+**One caveat worth reading before you deploy:** MCP has no trusted channel for
+the principal's instruction, and the agent cannot be asked for it — an injected
+agent would declare the attacker's goal as the task. The proxy reads it from a
+host-written file the agent cannot touch. Full detail in
+[`docs/MCP.md`](docs/MCP.md).
+
+---
+
 ## What it defends against
 
 | | |
@@ -201,6 +240,7 @@ and until it exists IDENSEC makes no utility claim.
 | | |
 | --- | --- |
 | [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How it works, and where it sits |
+| [`MCP.md`](docs/MCP.md) | Deploying as an MCP proxy |
 | [`AUTHORITY_MODEL.md`](docs/AUTHORITY_MODEL.md) | The formal admission rule |
 | [`DELEGATION_MODEL.md`](docs/DELEGATION_MODEL.md) | Multi-agent, and why there is no delegation chain |
 | [`THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Adversary model, mitigated / partial / unmitigated |

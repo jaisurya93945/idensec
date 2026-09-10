@@ -332,6 +332,40 @@ hidden. Magnitude unmeasured — see [`LIMITATIONS.md`](LIMITATIONS.md).
 
 ---
 
+## Thread 3b — A finding from building the MCP proxy (2026-09-10)
+
+`FACT` (observed directly, not reported) — **MCP carries no trusted channel for
+the principal's instruction.** The protocol moves tool calls and tool results.
+It does not move intent. Verified by implementing a full stdio proxy against the
+protocol surface: `initialize`, `tools/list`, `tools/call` and their results
+carry no field in which a host can state what the user actually asked for.
+
+`INFERENCE` — This is a structural problem for *every* containment design in the
+literature, not just ours. CaMeL, PACT, PAuth and the rest all take the trusted
+user query as an input and reason from it. If the dominant tool protocol has
+nowhere to put that query, then every one of those defences needs an out-of-band
+side channel before it can be deployed over MCP — which is a deployment blocker
+nobody in the literature we surveyed appears to have flagged, because the papers
+evaluate inside harnesses they control.
+
+`FACT` — The obvious fix is unsound and we rejected it. Asking the *agent* to
+declare the task lets an injected agent declare the attacker's goal as the task
+and launder it to `USER_INPUT`. That is a total bypass. There is deliberately no
+`idensec/declare_task` tool, and there should never be one.
+
+**Decision:** the task arrives from a host-written file the agent cannot write
+(`task_file`), and both deployment requirements — not agent-writable, and the
+principal's verbatim words rather than a model's summary — are stated in
+[`MCP.md`](MCP.md) rather than buried. A configuration without it produces a
+loud startup warning saying that a strict policy will deny nearly everything.
+
+`HYPOTHESIS` — A protocol-level field for principal intent, carried from host to
+server and marked as non-agent-writable, would be a small addition to MCP with
+disproportionate value for every containment approach. This is the most
+concrete standards contribution this project could make. Untested with anyone.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

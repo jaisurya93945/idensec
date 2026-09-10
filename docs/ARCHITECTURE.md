@@ -289,7 +289,7 @@ a function call is a cost, not a feature.
 | Shape | Fit | Status |
 | --- | --- | --- |
 | In-process library | Harnesses you control. Lowest latency, no extra failure mode. | **Built** |
-| MCP proxy | Any MCP host, no application changes. | Roadmap |
+| MCP proxy | Any MCP host, no application changes. | **Built** (stdio) — see [`MCP.md`](MCP.md) |
 | Framework adapters | LangGraph, agent SDK tool hooks. | Roadmap |
 | Attribute provider | Emit provenance facts into OPA / Cedar. | Roadmap |
 

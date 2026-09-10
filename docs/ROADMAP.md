@@ -24,9 +24,11 @@ additional engineering makes the project more true.
 
 | | Item | Notes |
 | --- | --- | --- |
-| `next` | **MCP proxy** | The highest-leverage integration by a distance: it works with any MCP host and needs no application changes. Both boundaries already exist in the protocol — tool results in, tool calls out. |
+| `done` | **MCP proxy** | Built: stdio transport, both boundaries, contract drafting, observe mode, audit to JSONL. 19 end-to-end tests against a hostile server over real pipes. See [`MCP.md`](MCP.md). Surfaced a protocol-level finding — MCP has no trusted channel for principal intent ([`RESEARCH.md`](RESEARCH.md) Thread 3b). |
 | `next` | **Contract linter** | Flags parameters that look authority-bearing but are declared `PAYLOAD`, tools with egress effects and no authority parameters, and sources authoritative for kinds no contract uses. Aimed squarely at the most likely real-world failure (threat model U06). |
 | `next` | **A seeded contract corpus** for common MCP servers, versioned and reviewable. | The one candidate moat that grows with adoption ([`COMPETITORS.md`](COMPETITORS.md) §4). |
+| `next` | **Streamable HTTP transport** for the proxy | Same interception points as stdio; the remaining half of MCP deployments. |
+| `next` | **Propose a principal-intent field to the MCP spec** | The concrete standards contribution this project can make, and a prerequisite for *any* containment design deploying cleanly over MCP. |
 | `later` | **Framework adapters** — agent SDK tool hooks, LangGraph. | Lower leverage than MCP; each is a separate integration surface. |
 | `later` | **Attribute provider for OPA / Cedar** | Emit provenance facts and let an existing policy engine render the verdict. The right long-term shape: we compute the attribute nobody else can, they own the decision language. |
 
