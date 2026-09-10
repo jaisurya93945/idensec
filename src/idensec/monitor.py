@@ -1,0 +1,639 @@
+"""The admission monitor.
+
+A :class:`Session` mediates one agent's execution. It has exactly two jobs, one
+at each boundary:
+
+* :meth:`Session.observe` -- content arriving from a source. Untrusted content
+  is sealed, trusted content is indexed.
+* :meth:`Session.admit` -- a tool call the agent wants to make. Handles are
+  resolved, every argument is attributed, and a verdict is produced.
+
+The verdict is a pure function of ``(session state, contracts, policy, call)``.
+No model is consulted, no network call is made, and replaying the same
+observations and calls always yields the same decisions -- which is what makes
+a decision auditable rather than merely logged.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
+
+from .audit import AuditChain, AuditRecord
+from .contracts import ContractRegistry, Effect, ParameterContract, Role, ToolContract
+from .decision import Decision, Finding, FindingCode, Verdict
+from .kinds import DEFAULT_KINDS, classify, extract
+from .labels import (
+    Attribution,
+    AttributionState,
+    Origin,
+    Sensitivity,
+    Source,
+    Trust,
+    merge_origins,
+)
+from .ledger import OperandLedger, Resolution
+from .policy import STRICT, Disposition, Policy
+
+__all__ = ["Session", "SessionHalted"]
+
+
+class SessionHalted(RuntimeError):
+    """Raised by :meth:`Session.require` when the session has stopped."""
+
+
+_INFORMATIONAL = frozenset({FindingCode.UNDECLARED_PARAMETER})
+
+_UNKNOWN_TOOL_CONTRACT_EFFECTS = frozenset(
+    {Effect.WRITE, Effect.NETWORK_EGRESS, Effect.IRREVERSIBLE}
+)
+"""Effects assumed for a tool we have no contract for.
+
+Assuming the worst is the only sound choice: a tool we have never seen might
+send mail, and treating it as read-only would make "forgot to write a contract"
+a silent bypass.
+"""
+
+
+class Session:
+    """One agent execution, mediated."""
+
+    def __init__(
+        self,
+        *,
+        contracts: ContractRegistry | Iterable[ToolContract] = (),
+        policy: Policy = STRICT,
+        sources: Iterable[Source] = (),
+        kinds: Sequence[str] | None = None,
+        id_factory: Any | None = None,
+        session_id: str = "",
+    ) -> None:
+        self.session_id = session_id
+        self.policy = policy
+        self.contracts = (
+            contracts
+            if isinstance(contracts, ContractRegistry)
+            else ContractRegistry(contracts)
+        )
+        self._kinds = tuple(kinds) if kinds is not None else DEFAULT_KINDS
+        self._sources: dict[str, Source] = {}
+        self.ledger = OperandLedger(kinds=self._kinds, id_factory=id_factory)
+        self.ledger.bind_source_lookup(self._source_labels)
+        self.audit = AuditChain()
+        self._step = 0
+        self._denials = 0
+        self._halted = False
+        self._confidential_context = False
+        for source in sources:
+            self.declare_source(source)
+
+    # -- sources ---------------------------------------------------------
+
+    def declare_source(self, source: Source) -> Source:
+        """Register a data origin.
+
+        Getting a source's trust wrong is a total bypass: labelling a web
+        fetcher as ``TOOL_TRUSTED`` and authoritative for ``email`` hands an
+        attacker the recipient field. This is the first deployment assumption
+        in the threat model, and it is the integrator's to get right -- IDENSEC
+        cannot verify it.
+        """
+        existing = self._sources.get(source.id)
+        if existing is not None and existing != source:
+            raise ValueError(
+                f"source {source.id!r} already declared with different labels; "
+                "relabelling a source mid-session would retroactively change "
+                "provenance"
+            )
+        self._sources[source.id] = source
+        return source
+
+    @property
+    def sources(self) -> Mapping[str, Source]:
+        return dict(self._sources)
+
+    def _source(self, source_id: str) -> Source:
+        try:
+            return self._sources[source_id]
+        except KeyError:
+            raise KeyError(
+                f"undeclared source {source_id!r}; declare it before observing "
+                "content from it"
+            ) from None
+
+    def _source_labels(self, source_id: str) -> tuple[int, int]:
+        source = self._sources.get(source_id)
+        if source is None:
+            return int(Trust.TOOL_UNTRUSTED), int(Sensitivity.PUBLIC)
+        return int(source.trust), int(source.sensitivity)
+
+    @property
+    def _trusted_source_ids(self) -> tuple[str, ...]:
+        return tuple(s.id for s in self._sources.values() if s.is_principal)
+
+    @property
+    def _untrusted_source_ids(self) -> tuple[str, ...]:
+        return tuple(s.id for s in self._sources.values() if not s.is_principal)
+
+    # -- state -----------------------------------------------------------
+
+    @property
+    def step(self) -> int:
+        return self._step
+
+    @property
+    def halted(self) -> bool:
+        return self._halted
+
+    @property
+    def denials(self) -> int:
+        return self._denials
+
+    def _next_step(self) -> int:
+        self._step += 1
+        return self._step
+
+    # -- read boundary ---------------------------------------------------
+
+    def observe(self, source_id: str, content: Any, *, path: str = "") -> Any:
+        """Bring content into the agent's context under a source label.
+
+        Returns what the agent should actually see: sealed for untrusted
+        sources, unchanged for trusted ones. Structures are walked, so a JSON
+        tool result gets field-level provenance (``results[2].url``) rather
+        than one label for the whole blob.
+        """
+        source = self._source(source_id)
+        step = self._next_step()
+        if source.sensitivity >= Sensitivity.CONFIDENTIAL:
+            self._confidential_context = True
+        return self._walk_observe(source, content, step, path)
+
+    def _walk_observe(self, source: Source, content: Any, step: int, path: str) -> Any:
+        if isinstance(content, str):
+            if source.is_principal or source.trust >= Trust.TOOL_TRUSTED:
+                return self.ledger.index(source, content, step=step, path=path)
+            return self.ledger.seal(source, content, step=step, path=path)
+        if isinstance(content, Mapping):
+            return {
+                key: self._walk_observe(
+                    source, value, step, f"{path}.{key}" if path else str(key)
+                )
+                for key, value in content.items()
+            }
+        if isinstance(content, (list, tuple)):
+            walked = [
+                self._walk_observe(source, value, step, f"{path}[{i}]")
+                for i, value in enumerate(content)
+            ]
+            return type(content)(walked) if isinstance(content, tuple) else walked
+        return content
+
+    # -- write boundary --------------------------------------------------
+
+    def admit(self, tool: str, arguments: Mapping[str, Any]) -> Decision:
+        """Decide whether a tool call may proceed, and with what arguments."""
+        step = self._next_step()
+        enforced = self.policy is not None and self._enforcing()
+
+        if self._halted:
+            return self._finalise(
+                Verdict.DENY,
+                tool,
+                step,
+                dict(arguments),
+                (Finding(code=FindingCode.SESSION_HALTED, detail="denial budget exhausted"),),
+                enforced,
+            )
+
+        findings: list[Finding] = []
+        verdict = Verdict.ALLOW
+
+        contract = self.contracts.get(tool)
+        if contract is None:
+            findings.append(
+                Finding(
+                    code=FindingCode.UNKNOWN_TOOL,
+                    detail=f"no contract declared for {tool!r}",
+                )
+            )
+            verdict = verdict.worse_of(
+                Verdict.from_disposition(self.policy.unknown_tool)
+            )
+            contract = ToolContract(
+                tool=tool,
+                effects=_UNKNOWN_TOOL_CONTRACT_EFFECTS,
+                default_role=Role.AUTHORITY,
+            )
+
+        resolved: dict[str, Any] = {}
+        sensitivity = Sensitivity.PUBLIC
+        authority_attributions: list[Attribution] = []
+
+        for name, raw in arguments.items():
+            parameter = contract.parameter(name)
+            if contract.parameters and name not in contract.parameters:
+                findings.append(
+                    Finding(
+                        code=FindingCode.UNDECLARED_PARAMETER,
+                        parameter=name,
+                        detail=f"treated as {parameter.role.value} by default_role",
+                    )
+                )
+            value, leaves = self._resolve(raw)
+            resolved[name] = value
+
+            for leaf_path, resolution in leaves:
+                label = f"{name}{leaf_path}"
+                for unknown in resolution.unknown_seals:
+                    findings.append(
+                        Finding(
+                            code=FindingCode.UNKNOWN_SEAL,
+                            parameter=label,
+                            detail=f"unresolvable handle {unknown}",
+                        )
+                    )
+                    verdict = verdict.worse_of(
+                        Verdict.from_disposition(self.policy.unknown_seal)
+                    )
+
+                if parameter.role is Role.ADVISORY:
+                    continue
+
+                if parameter.role is Role.PAYLOAD:
+                    for attribution in self._payload_attributions(resolution):
+                        sensitivity = max(sensitivity, attribution.sensitivity)
+                    continue
+
+                leaf_findings, attributions = self._check_authority(
+                    label, parameter, resolution
+                )
+                findings.extend(leaf_findings)
+                authority_attributions.extend(attributions)
+                for attribution in attributions:
+                    sensitivity = max(sensitivity, attribution.sensitivity)
+                for finding in leaf_findings:
+                    verdict = verdict.worse_of(self._disposition_for(finding.code))
+
+        if contract.can_egress:
+            principal_directed = bool(authority_attributions) and all(
+                a.principal_directed() for a in authority_attributions
+            )
+            if not principal_directed:
+                if sensitivity >= Sensitivity.CONFIDENTIAL:
+                    findings.append(
+                        Finding(
+                            code=FindingCode.CONFIDENTIAL_EGRESS,
+                            detail=(
+                                f"payload quotes {sensitivity.name} content and is "
+                                "reaching a network_egress sink whose destination the "
+                                "principal did not choose"
+                            ),
+                        )
+                    )
+                    verdict = verdict.worse_of(
+                        Verdict.from_disposition(self.policy.confidential_egress)
+                    )
+                elif self._confidential_context:
+                    findings.append(
+                        Finding(
+                            code=FindingCode.CONFIDENTIAL_CONTEXT_EGRESS,
+                            detail=(
+                                "a confidential source was observed in this session; "
+                                "payload does not visibly quote it, but paraphrase is "
+                                "not detectable"
+                            ),
+                        )
+                    )
+                    verdict = verdict.worse_of(
+                        Verdict.from_disposition(self.policy.confidential_context_egress)
+                    )
+
+        return self._finalise(verdict, tool, step, resolved, tuple(findings), enforced)
+
+    # -- authority checking ----------------------------------------------
+
+    def _check_authority(
+        self, label: str, parameter: ParameterContract, resolution: Resolution
+    ) -> tuple[list[Finding], list[Attribution]]:
+        """Decide whether one authority-bearing leaf is admissible.
+
+        Two regimes, and the difference is the incentive to declare kinds:
+
+        * **Kinds declared** -- authority is carried by operands of those kinds.
+          Every operand present must be authorised and of an accepted kind;
+          surrounding text (``"Bob <...>"``, a ``mailto:`` prefix) is
+          formatting and is tolerated, because the parameter has told us where
+          its authority lives.
+        * **No kinds declared** -- we do not know what shape authority takes
+          here, so the whole leaf must be positively attributed. This is the
+          fail-closed default.
+        """
+        text = resolution.text
+        findings: list[Finding] = []
+        attributions: list[Attribution] = []
+
+        operands = extract(text, self._kinds)
+        # Operands whose span was produced verbatim by a handle are attributed
+        # from the ledger; anything else the model typed itself.
+        for match in operands:
+            span = resolution.covers(match.start, match.end)
+            if span is not None:
+                attribution = Attribution(
+                    state=AttributionState.ATTRIBUTED,
+                    origins=span.operand.origins,
+                    derivation="seal",
+                )
+            else:
+                attribution = self._attribute_literal(match.value, match.kind)
+            attributions.append(attribution)
+
+            if parameter.kinds and match.kind not in parameter.kinds:
+                findings.append(
+                    Finding(
+                        code=FindingCode.KIND_MISMATCH,
+                        parameter=label,
+                        operand_kind=match.kind,
+                        value=match.value,
+                        detail=f"expected one of {sorted(parameter.kinds)}",
+                        attribution=attribution,
+                    )
+                )
+                continue
+            findings.extend(
+                self._authority_findings(
+                    label, parameter, match.kind, attribution, match.value
+                )
+            )
+
+        if parameter.kinds:
+            if not any(m.kind in parameter.kinds for m in operands):
+                findings.append(
+                    Finding(
+                        code=FindingCode.KIND_MISMATCH,
+                        parameter=label,
+                        detail=(
+                            f"no operand of expected kind {sorted(parameter.kinds)} "
+                            "present in an authority-bearing argument"
+                        ),
+                    )
+                )
+            return findings, attributions
+
+        # No declared kinds: the whole leaf must stand up.
+        whole = self._attribute_whole(text, resolution)
+        attributions.append(whole)
+        kind = classify(text, self._kinds) or ""
+        findings.extend(self._authority_findings(label, parameter, kind, whole, text))
+        return findings, attributions
+
+    def _authority_findings(
+        self,
+        label: str,
+        parameter: ParameterContract,
+        kind: str,
+        attribution: Attribution,
+        value: str,
+    ) -> list[Finding]:
+        if attribution.state is AttributionState.UNATTRIBUTED:
+            return [
+                Finding(
+                    code=FindingCode.UNATTRIBUTED_AUTHORITY,
+                    parameter=label,
+                    operand_kind=kind,
+                    value=value,
+                    detail="value traces to no declared source",
+                    attribution=attribution,
+                )
+            ]
+        if not attribution.is_authorised_for(kind, self._sources):
+            return [
+                Finding(
+                    code=FindingCode.UNAUTHORISED_AUTHORITY,
+                    parameter=label,
+                    operand_kind=kind,
+                    value=value,
+                    detail=(
+                        "no contributing source is authoritative for "
+                        f"{kind or 'this value'}: "
+                        + ", ".join(o.locator() for o in attribution.origins)
+                    ),
+                    attribution=attribution,
+                )
+            ]
+        return []
+
+    # -- attribution -----------------------------------------------------
+
+    def _attribute_literal(self, value: str, kind: str) -> Attribution:
+        """Attribute a value the model typed rather than referenced."""
+        operand = self.ledger.lookup(kind, value)
+        if operand is not None:
+            return Attribution(
+                state=AttributionState.ATTRIBUTED,
+                origins=operand.origins,
+                derivation="operand",
+            )
+        return self._attribute_by_derivation(value)
+
+    def _attribute_whole(self, text: str, resolution: Resolution) -> Attribution:
+        span = resolution.covers(0, len(text))
+        if span is not None:
+            return Attribution(
+                state=AttributionState.ATTRIBUTED,
+                origins=span.operand.origins,
+                derivation="seal",
+            )
+        operand = self.ledger.find_value(text)
+        if operand is not None:
+            return Attribution(
+                state=AttributionState.ATTRIBUTED,
+                origins=operand.origins,
+                derivation="operand",
+            )
+        return self._attribute_by_derivation(text)
+
+    def _attribute_by_derivation(self, value: str) -> Attribution:
+        """Fall back to text derivation, trusted sources first.
+
+        Checking trusted sources first is not an optimisation. If the principal
+        wrote the value, that origin is what authorises it, and an attacker
+        echoing the same value into a page must not be able to change the
+        answer (ADR-0008).
+        """
+        origin = self.ledger.derivable_from(value, self._trusted_source_ids)
+        if origin is not None:
+            return Attribution(
+                state=AttributionState.ATTRIBUTED,
+                origins=(origin,),
+                derivation="trusted-substring",
+            )
+        origin = self.ledger.derivable_from(value, self._untrusted_source_ids)
+        if origin is not None:
+            return Attribution(
+                state=AttributionState.ATTRIBUTED,
+                origins=(origin,),
+                derivation="untrusted-substring",
+            )
+        return Attribution(state=AttributionState.UNATTRIBUTED, derivation="none")
+
+    def _payload_attributions(self, resolution: Resolution) -> list[Attribution]:
+        """Payload leaves are not authority-checked, only sensitivity-tracked."""
+        attributions = [
+            Attribution(
+                state=AttributionState.ATTRIBUTED,
+                origins=span.operand.origins,
+                derivation="seal",
+            )
+            for span in resolution.spans
+        ]
+        origins: list[Origin] = []
+        for source_id in (*self._trusted_source_ids, *self._untrusted_source_ids):
+            origin = self.ledger.derivable_from(resolution.text, (source_id,))
+            if origin is not None:
+                origins.append(origin)
+        if origins:
+            attributions.append(
+                Attribution(
+                    state=AttributionState.ATTRIBUTED,
+                    origins=merge_origins(origins),
+                    derivation="payload-substring",
+                )
+            )
+        return attributions
+
+    # -- value resolution ------------------------------------------------
+
+    def _resolve(self, value: Any, path: str = "") -> tuple[Any, list[tuple[str, Resolution]]]:
+        """Expand handles through nested structures, keeping leaf paths."""
+        if isinstance(value, str):
+            resolution = self.ledger.resolve(value)
+            return resolution.text, [(path, resolution)]
+        if isinstance(value, Mapping):
+            out: dict[Any, Any] = {}
+            leaves: list[tuple[str, Resolution]] = []
+            for key, item in value.items():
+                resolved, sub = self._resolve(item, f"{path}.{key}")
+                out[key] = resolved
+                leaves.extend(sub)
+            return out, leaves
+        if isinstance(value, (list, tuple)):
+            out_list: list[Any] = []
+            leaves = []
+            for index, item in enumerate(value):
+                resolved, sub = self._resolve(item, f"{path}[{index}]")
+                out_list.append(resolved)
+                leaves.extend(sub)
+            return (tuple(out_list) if isinstance(value, tuple) else out_list), leaves
+        if isinstance(value, bool) or value is None:
+            return value, []
+        if isinstance(value, (int, float)):
+            # Numbers can carry authority (an amount, an account) so they are
+            # attributed as text rather than waved through.
+            rendered = repr(value) if isinstance(value, float) else str(value)
+            return value, [(path, Resolution(text=rendered))]
+        return value, []
+
+    # -- dispositions and finalisation -----------------------------------
+
+    def _disposition_for(self, code: FindingCode) -> Verdict:
+        mapping = {
+            FindingCode.UNATTRIBUTED_AUTHORITY: self.policy.unattributed_authority,
+            FindingCode.UNAUTHORISED_AUTHORITY: self.policy.unauthorised_authority,
+            FindingCode.UNKNOWN_SEAL: self.policy.unknown_seal,
+            FindingCode.UNKNOWN_TOOL: self.policy.unknown_tool,
+            FindingCode.KIND_MISMATCH: self.policy.kind_mismatch,
+            FindingCode.CONFIDENTIAL_EGRESS: self.policy.confidential_egress,
+            FindingCode.CONFIDENTIAL_CONTEXT_EGRESS: self.policy.confidential_context_egress,
+        }
+        disposition = mapping.get(code)
+        if disposition is None:
+            return Verdict.ALLOW
+        return Verdict.from_disposition(disposition)
+
+    def _enforcing(self) -> bool:
+        return any(
+            d is not Disposition.ALLOW
+            for d in (
+                self.policy.unattributed_authority,
+                self.policy.unauthorised_authority,
+                self.policy.unknown_seal,
+                self.policy.unknown_tool,
+                self.policy.kind_mismatch,
+                self.policy.confidential_egress,
+                self.policy.confidential_context_egress,
+            )
+        )
+
+    def _finalise(
+        self,
+        verdict: Verdict,
+        tool: str,
+        step: int,
+        arguments: Mapping[str, Any],
+        findings: tuple[Finding, ...],
+        enforced: bool,
+    ) -> Decision:
+        decision = Decision(
+            verdict=verdict,
+            tool=tool,
+            step=step,
+            arguments=dict(arguments),
+            findings=findings,
+            enforced=enforced,
+        )
+        self._record(decision)
+        if verdict is Verdict.DENY:
+            self._denials += 1
+            budget = self.policy.denial_budget
+            if budget >= 0 and self._denials > budget:
+                self._halted = True
+        return decision
+
+    def _record(
+        self, decision: Decision, extra: Mapping[str, Any] | None = None
+    ) -> AuditRecord:
+        payload: dict[str, Any] = {
+            "session": self.session_id,
+            **decision.to_dict(),
+            "reason": decision.reason(),
+        }
+        if extra:
+            payload.update(extra)
+        return self.audit.append(payload)
+
+    # -- integrator helpers ----------------------------------------------
+
+    def require(self, tool: str, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Admit a call and return executable arguments, or raise.
+
+        The convenience path for integrators who want a hard boundary: it is
+        impossible to accidentally execute the *unresolved* arguments, because
+        the only thing this returns is the resolved set.
+        """
+        decision = self.admit(tool, arguments)
+        if not decision.allowed:
+            raise SessionHalted(decision.agent_message)
+        return decision.arguments
+
+    def approve(self, decision: Decision, approver: str, note: str = "") -> Decision:
+        """Record a human's approval of an escalated decision.
+
+        Only ``ESCALATE`` decisions can be approved. A denial is not a request
+        for permission -- it is a statement that the call is not attributable,
+        and no human sign-off makes an unattributable value attributable.
+        """
+        if decision.verdict is not Verdict.ESCALATE:
+            raise ValueError(
+                f"only escalated decisions can be approved, got {decision.verdict.value}"
+            )
+        approved = Decision(
+            verdict=Verdict.ALLOW,
+            tool=decision.tool,
+            step=decision.step,
+            arguments=dict(decision.arguments),
+            findings=decision.findings,
+            enforced=decision.enforced,
+        )
+        self._record(approved, {"approved_by": approver, "approval_note": note})
+        return approved
