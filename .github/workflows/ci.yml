@@ -105,6 +105,27 @@ jobs:
                 f"{claims} claim readOnlyHint, none believed")
           PY
 
+      - name: Sealing is lossless on real MCP output
+        # Replays 23 responses captured from six published servers. Exits
+        # non-zero if resolving a sealed result fails to reproduce the
+        # original -- the one property the read boundary must never break.
+        run: |
+          python benchmarks/mcp_output.py --json sealing.json
+          python - <<'PY'
+          import json, sys
+          data = json.load(open("sealing.json"))
+          if data["fidelity_failures"]:
+              sys.exit(f"sealing damaged output: {data['fidelity_failures']}")
+          git = data["servers"]["git"]
+          density = git["sealed_chars"] / git["chars"]
+          # 1.1% today. Before the hostname allowlist it was 6.6% on this same
+          # corpus, because every dotted identifier in a diff was sealed, so
+          # this threshold discriminates by a factor of three either way.
+          if density > 0.02:
+              sys.exit(f"sealing density on source diffs rose to {density:.1%}")
+          print(f"lossless; git output {density:.1%} sealed")
+          PY
+
       - name: Extraction coverage does not regress
         # Coverage is a security parameter; a pattern change that silently
         # drops recall should fail the build, not surface months later.

@@ -285,6 +285,14 @@ a server saying it is destructive is believed, a server saying it is harmless is
 not — believing that would disable the confidentiality rules on 62% of the
 corpus. The real schemas found four defects a corpus we wrote never would.
 
+**Against real MCP tool output** — 23 responses from six servers. **Sealing is
+lossless**: resolving every handle reproduces the original byte for byte, and it
+replaces 3.7% of characters (0% to 43%, depending entirely on the server). That
+measurement immediately found the `hostname` filter was a *blocklist*, so
+`Role.AUTHORITY`, `json.dumps` and `time.time` were all being sealed — 151 of
+244 operands, or every line of Python an agent reads. A TLD allowlist took that
+to zero at no cost to recall.
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```

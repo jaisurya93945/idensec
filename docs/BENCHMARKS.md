@@ -559,6 +559,110 @@ do not look like that.
 
 ---
 
+## Real MCP tool *output* (2026-09-12)
+
+The schema corpus measured drafting. This measures the other boundary: what
+`observe()` does to the JSON those servers actually return. **23 calls, 34 969
+characters**, captured from six locally-launched servers and checked in at
+[`benchmarks/data/mcp_results.json`](../benchmarks/data/mcp_results.json).
+
+`git_show` is pinned to a fixed revision rather than `HEAD`: a fixture whose
+content changes with every commit is not a fixture. The pinned commit was chosen
+because its diff is code-heavy *and* contains six occurrences of this project's
+own handle syntax, which is what exercises the decoy path below.
+
+```
+python3 benchmarks/mcp_output.py            # replay the captured responses
+python3 benchmarks/mcp_output.py --capture  # re-probe the live servers
+```
+
+Every call is read-only and local. Two exclusions are deliberate: `fetch` is
+never called, because its only tool reaches someone else's infrastructure; and
+`everything.get-env` is never called, because it returns the process
+environment and a benchmark that commits its own environment to a public
+repository is a secret-leaking benchmark. **That tool advertises
+`readOnlyHint: true`** — genuinely read-only, and still the most dangerous call
+in the corpus.
+
+| server | calls | chars | operands | sealed | lossless |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| everything | 5 | 658 | 4 | 17.0% | yes |
+| filesystem | 8 | 2 536 | 20 | 23.6% | yes |
+| git | 4 | 30 618 | 21 | 1.1% | yes |
+| memory | 3 | 588 | 8 | 42.9% | yes |
+| sequential | 1 | 127 | 0 | 0.0% | yes |
+| time | 2 | 442 | 0 | 0.0% | yes |
+| **total** | **23** | **34 969** | **53** | **3.7%** | **yes** |
+
+**Sealing is lossless and it is nearly free.** Resolving every handle reproduces
+the original byte for byte, and 3.7% of characters are replaced across the
+corpus — though the per-server spread from 0% to 43% is the more honest
+summary. "Prose passes through untouched" has been an assertion in this
+repository since the first commit; it is now a property checked against real
+output on every run, and the benchmark exits non-zero if it ever fails.
+
+**With exactly one intended exception, which this benchmark found on its first
+run.** A `git show` of this repository contains the string `[[idn:email:…]]`,
+because the threat model documents the handle syntax. The read boundary defuses
+handle-shaped text in untrusted content so it cannot masquerade as a reference
+(T05), so that one response does *not* round-trip — by design. Defusals are
+counted separately from damage.
+
+### Three false-positive classes, one of them serious
+
+| what was extracted | why | status |
+| --- | --- | --- |
+| `Role.AUTHORITY`, `json.dumps`, `time.time`, `pytest.mark.parametrize` — **151 of 244 operands** on the capture that found it | the `hostname` filter was a **blocklist** of file extensions, so anything unlisted was a hostname | **fixed** |
+| `~/.ssh/id_ed25519.` with the sentence's full stop attached | paths did not strip trailing punctuation, so the handle resolved to a value the agent would never pass back | **fixed** |
+| `9007199254740991` (JavaScript's `MAX_SAFE_INTEGER`) as an `account_number` | `\d{8,19}` cannot distinguish a card number from a constant | **not fixed** — see below |
+
+**The hostname one is the serious one, and its shape is the lesson.** A
+blocklist is a filter, not a boundary — this repository says so about
+prompt-injection classifiers in its own roadmap, and then shipped one here.
+Replacing it with a **TLD allowlist** took spurious hostname extractions to
+**zero**, at **no cost** to synthetic recall (93%, unchanged) and no new false
+positives (0/16 prose samples).
+
+On the pinned corpus the effect is reproducible as sealing density over `git`
+output: **6.6% before the fix, 1.1% after** — 2 008 characters replaced versus
+342, on identical input. Every hostname that survives is a real one
+(`corp.example`, `evil.example` from the commit's own test fixtures), and CI
+fails if that density rises above 2%.
+
+Neither filter works alone: `.py` is Paraguay, `.md` is Moldova, `.sh` is
+St Helena and `.io` is the British Indian Ocean Territory, so accepting every
+two-letter label as a ccTLD put `main.py` straight back. The allowlist handles
+dotted identifiers; the extension blocklist handles the ccTLD collisions.
+
+The cost is real and is the trade already made for `ipv4`: a hostname under a
+gTLD not in the list is not sealed. **A missed seal is not a bypass** — an
+unsealed untrusted value still matches its source observation at the write
+boundary and is refused by the unattributed rule.
+
+**`account_number` is left alone, and the reason is not that it is fine.** On
+the capture that found it, four of its six hits were false
+(`9007199254740991`). But the corpus is one repository's
+`git` output, which is code-heavy and not representative; removing the kind
+from the defaults would break any contract that *declares* it (`kind_mismatch`
+denies everything); and the verdict is unchanged either way — with the kind
+removed, a bare number falls to the fail-closed whole-value path and an
+injected account is still denied, which was checked rather than assumed. So the
+false-positive rate is reported and the decision is listed as owed rather than
+taken on one biased sample.
+
+### What this does not show
+
+- **Not recall.** Which authority-bearing values in real output *should* have
+  been sealed and were not is unmeasured, because labelling it would again be
+  us grading ourselves. The synthetic recall figure above remains the only one.
+- **Not representative traffic.** Six servers, one of them reading a fixture
+  this benchmark wrote. A CRM, a ticketing system or a mail server would seal
+  very differently — `memory` seals 43% of its output and `time` seals none, and
+  that 43-point spread across six servers is the honest summary of how little
+  one number would mean.
+
+---
+
 ## Method notes
 
 - One untimed warm-up call per measurement, so lazily compiled regexes and

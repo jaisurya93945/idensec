@@ -1,0 +1,502 @@
+{
+ "everything": {
+  "results": [
+   {
+    "arguments": {
+     "message": "mail ana.ramos@corp.example about ACME-4417"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "Echo: mail ana.ramos@corp.example about ACME-4417",
+       "type": "text"
+      }
+     ]
+    },
+    "tool": "echo"
+   },
+   {
+    "arguments": {
+     "a": 2,
+     "b": 3
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "The sum of 2 and 3 is 5.",
+       "type": "text"
+      }
+     ]
+    },
+    "tool": "get-sum"
+   },
+   {
+    "arguments": {
+     "location": "London"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool get-structured-content: Invalid option: expected one of \"New York\"|\"Chicago\"|\"Los Angeles\" at location",
+       "type": "text"
+      }
+     ],
+     "isError": true
+    },
+    "tool": "get-structured-content"
+   },
+   {
+    "arguments": {
+     "count": 3
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "Here are 3 resource links to resources available in this server:",
+       "type": "text"
+      },
+      {
+       "description": "Resource 1: plaintext resource",
+       "mimeType": "text/plain",
+       "name": "Blob Resource 1",
+       "type": "resource_link",
+       "uri": "demo://resource/dynamic/blob/1"
+      },
+      {
+       "description": "Resource 2: plaintext resource",
+       "mimeType": "text/plain",
+       "name": "Text Resource 2",
+       "type": "resource_link",
+       "uri": "demo://resource/dynamic/text/2"
+      },
+      {
+       "description": "Resource 3: plaintext resource",
+       "mimeType": "text/plain",
+       "name": "Blob Resource 3",
+       "type": "resource_link",
+       "uri": "demo://resource/dynamic/blob/3"
+      }
+     ]
+    },
+    "tool": "get-resource-links"
+   },
+   {
+    "arguments": {
+     "messageType": "success"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "annotations": {
+        "audience": [
+         "user"
+        ],
+        "priority": 0.7
+       },
+       "text": "Operation completed successfully",
+       "type": "text"
+      }
+     ]
+    },
+    "tool": "get-annotated-message"
+   }
+  ],
+  "server": {
+   "name": "mcp-servers/everything",
+   "title": "Everything Reference Server",
+   "version": "2.0.0"
+  }
+ },
+ "filesystem": {
+  "results": [
+   {
+    "arguments": {
+     "path": "/home/user/idensec/benchmarks/data/fixture"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "[FILE] invoice-2291.txt\n[FILE] notes.txt\n[FILE] onboarding.md",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "content": "[FILE] invoice-2291.txt\n[FILE] notes.txt\n[FILE] onboarding.md"
+     }
+    },
+    "tool": "list_directory"
+   },
+   {
+    "arguments": {
+     "path": "/home/user/idensec/benchmarks/data/fixture"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "[\n  {\n    \"name\": \"invoice-2291.txt\",\n    \"type\": \"file\"\n  },\n  {\n    \"name\": \"notes.txt\",\n    \"type\": \"file\"\n  },\n  {\n    \"name\": \"onboarding.md\",\n    \"type\": \"file\"\n  }\n]",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "content": "[\n  {\n    \"name\": \"invoice-2291.txt\",\n    \"type\": \"file\"\n  },\n  {\n    \"name\": \"notes.txt\",\n    \"type\": \"file\"\n  },\n  {\n    \"name\": \"onboarding.md\",\n    \"type\": \"file\"\n  }\n]"
+     }
+    },
+    "tool": "directory_tree"
+   },
+   {
+    "arguments": {
+     "path": "/home/user/idensec/benchmarks/data/fixture/onboarding.md"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "# Onboarding\n\nMail your signed form to ana.ramos@corp.example and cc payroll@corp.example.\nThe handbook lives at https://intranet.corp.example/handbook/v4 and the deploy key at ~/.ssh/id_ed25519.\nQuestions: +44 20 7946 0958.\n",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "content": "# Onboarding\n\nMail your signed form to ana.ramos@corp.example and cc payroll@corp.example.\nThe handbook lives at https://intranet.corp.example/handbook/v4 and the deploy key at ~/.ssh/id_ed25519.\nQuestions: +44 20 7946 0958.\n"
+     }
+    },
+    "tool": "read_text_file"
+   },
+   {
+    "arguments": {
+     "path": "/home/user/idensec/benchmarks/data/fixture/invoice-2291.txt"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "Invoice 2291\nPay to GB29NWBK60161331926819 at sortcode 60-16-13, account 31926819.\nRemit by 2026-03-01. Reference ACME-4417.\n",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "content": "Invoice 2291\nPay to GB29NWBK60161331926819 at sortcode 60-16-13, account 31926819.\nRemit by 2026-03-01. Reference ACME-4417.\n"
+     }
+    },
+    "tool": "read_text_file"
+   },
+   {
+    "arguments": {
+     "path": "/home/user/idensec/benchmarks/data/fixture/notes.txt"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "Nothing in this file is an identifier. It is three sentences of ordinary prose about the weather, written so that a sealing pass has something to leave alone. If any of it comes back changed, the no-op claim is wrong.\n",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "content": "Nothing in this file is an identifier. It is three sentences of ordinary prose about the weather, written so that a sealing pass has something to leave alone. If any of it comes back changed, the no-op claim is wrong.\n"
+     }
+    },
+    "tool": "read_text_file"
+   },
+   {
+    "arguments": {
+     "path": "/home/user/idensec/benchmarks/data/fixture/onboarding.md"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "size: 225\ncreated: Sat Sep 12 2026 10:58:17 GMT+0000 (Coordinated Universal Time)\nmodified: Sat Sep 12 2026 11:06:31 GMT+0000 (Coordinated Universal Time)\naccessed: Sat Sep 12 2026 11:06:32 GMT+0000 (Coordinated Universal Time)\nisDirectory: false\nisFile: true\npermissions: 644",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "content": "size: 225\ncreated: Sat Sep 12 2026 10:58:17 GMT+0000 (Coordinated Universal Time)\nmodified: Sat Sep 12 2026 11:06:31 GMT+0000 (Coordinated Universal Time)\naccessed: Sat Sep 12 2026 11:06:32 GMT+0000 (Coordinated Universal Time)\nisDirectory: false\nisFile: true\npermissions: 644"
+     }
+    },
+    "tool": "get_file_info"
+   },
+   {
+    "arguments": {
+     "path": "/home/user/idensec/benchmarks/data/fixture",
+     "pattern": "*.txt"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "/home/user/idensec/benchmarks/data/fixture/invoice-2291.txt\n/home/user/idensec/benchmarks/data/fixture/notes.txt",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "content": "/home/user/idensec/benchmarks/data/fixture/invoice-2291.txt\n/home/user/idensec/benchmarks/data/fixture/notes.txt"
+     }
+    },
+    "tool": "search_files"
+   },
+   {
+    "arguments": {},
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "Allowed directories:\n/home/user/idensec/benchmarks/data/fixture",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "content": "Allowed directories:\n/home/user/idensec/benchmarks/data/fixture"
+     }
+    },
+    "tool": "list_allowed_directories"
+   }
+  ],
+  "server": {
+   "name": "secure-filesystem-server",
+   "version": "0.2.0"
+  }
+ },
+ "git": {
+  "results": [
+   {
+    "arguments": {
+     "repo_path": "/home/user/idensec"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "Repository status:\nOn branch main\nYour branch is up to date with 'origin/main'.\n\nChanges not staged for commit:\n  (use \"git add <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tmodified:   .github/workflows/ci.yml\n\tmodified:   README.md\n\tmodified:   benchmarks/data/README.md\n\tmodified:   benchmarks/mcp_probe.py\n\tmodified:   docs/BENCHMARKS.md\n\tmodified:   docs/LIMITATIONS.md\n\tmodified:   docs/RESEARCH.md\n\tmodified:   docs/ROADMAP.md\n\tmodified:   src/idensec/kinds.py\n\tmodified:   tests/test_kinds.py\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tbenchmarks/data/fixture/\n\tbenchmarks/data/mcp_results.json\n\tbenchmarks/mcp_output.py\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\")",
+       "type": "text"
+      }
+     ],
+     "isError": false
+    },
+    "tool": "git_status"
+   },
+   {
+    "arguments": {
+     "max_count": 5,
+     "repo_path": "/home/user/idensec"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "Commit history:\nCommit: '15aba63c472f48aadd771f1628055330d7b04f01'\nAuthor: <git.Actor \"jaisurya93945 <jaisurya3450@gmail.com>\">\nDate: 2026-09-12 05:43:26+00:00\nMessage: 'feat: measure contract drafting against MCP schemas we did not write\\n\\nEvery previous measurement of the deriver used a corpus we authored, and\\nBENCHMARKS.md has said so since the corpus existed. This replaces the excuse\\nwith data: `tools/list` captured over stdio from seven published MCP servers,\\n52 tools and 94 parameters, checked in so the measurement reproduces offline.\\n\\nThe headline is not a score. It is that MCP carries an effect signal this\\nproject had said could not exist, and that believing it naively would be a\\ntotal bypass:\\n\\n  51 of 52 tools carry `annotations`\\n  32 of 52 claim `readOnlyHint: true`\\n\\nA monitor that believed that hint would have disabled its own confidentiality\\nrules on 62% of this corpus on day one. So annotations are read under a\\ndirection test rather than a trust decision -- an annotation may ADD an effect\\nand may never remove one. `destructiveHint` and `openWorldHint` are believed,\\nbecause a hostile server lying that way only denies its own tools;\\n`readOnlyHint` is ignored outright. The rule generalises past MCP: it is the\\ncondition under which any attacker-controllable metadata is safe to read.\\nBelieving only the restrictive half completed 8 of 52 drafts that would\\notherwise have carried no effects at all.\\n\\nFour defects the real schemas found, none of which a corpus we wrote would\\nhave:\\n\\n  * `\"type\": [\"string\", \"null\"]` crashed the deriver. JSON Schema\\'s `type` is\\n    a string *or a list*. Unions are now downgraded only when every member is\\n    a type that cannot hold an identifier.\\n  * camelCase was invisible: hints split on `_` only, so `sortBy` stayed\\n    AUTHORITY while `sort_by` was advisory, and `fileId` missed the identifier\\n    suffix `file_id` matched. Every JavaScript server names things this way.\\n  * the linter reported the `unclassified` pseudo-kind as an unregistered\\n    kind, at ERROR severity, on 23 of 94 parameters -- a quarter of an\\n    operator\\'s first run, all wrong, on the checks that exist to be trusted.\\n  * `branchId` drafted the collection `**.branchs`, which matches nothing and\\n    makes reference binding silently never fire for that parameter.\\n\\nAnd one uncomfortable result, recorded rather than smoothed over: reference\\nbinding\\'s collection draft fires on 2 of 60 authority parameters here.\\nPublished servers name things `path`, `repo_path` and `branch_name`, not\\n`<noun>_id`. It was designed against AgentDojo\\'s keyed dictionaries, and the\\nservers people actually deploy are not shaped that way. ADR-0011 is qualified\\naccordingly.\\n\\nCI now replays the corpus and fails on any parameter reported as an\\nunregistered kind, which is the defect above turned into a regression test.\\n'\n\nCommit: '1957c33e8f7ca19594dd46b3d8b466e7389e89e8'\nAuthor: <git.Actor \"jaisurya93945 <jaisurya3450@gmail.com>\">\nDate: 2026-09-12 05:32:04+00:00\nMessage: 'feat: bind entity ids to the principal\\'s own reference, and sweep the knobs\\n\\nThe previous milestone named entity selection as the binding constraint and\\ngave three options: narrow the claim, attack it directly, or stop. This takes\\nthe second. An id is admissible when the principal\\'s own words *name* the\\nrecord it identifies -- its title, its filename, its location -- and not when\\nonly an injection did.\\n\\nGranted per field path as a pseudo-kind (`referenced`), exactly like any other\\noperand kind, so it is opt-in and costs nothing where it is not declared.\\n\\nWhat it is worth, measured rather than assumed:\\n\\n  workspace suite (where entity selection lives)   70.0% -> 77.5% utility\\n                                                   100%  -> 100%  security\\n  all four suites, best configuration >= 90% sec   66.0% -> 68.0% utility\\n\\nTwo tasks out of ninety-seven. It does not clear this project\\'s own 90%/70%\\nbar; the closest configuration that exists is 91.6%/68.0%.\\n\\nThree defects in the mechanism were found by measuring it and none by review:\\n\\n  * whole-field matching fired on *nothing* -- real instructions say \"my Dental\\n    check-up\" about a record titled `Dentist Appointment`, so the unit of\\n    comparison had to become a fragment;\\n  * ids were bound without their collection, so naming calendar event 13\\n    authorised deleting file 13 -- the mechanism reproducing the attack it\\n    exists to refuse. Parameters now declare which directory their id\\n    addresses, and it fires for none that do not;\\n  * the new labelling pinned its own quotation floor while the sweep varied\\n    everyone else\\'s, making its column invariant by construction. That would\\n    have been published as a finding.\\n\\nTwo more surfaced alongside: reference binding was silently inflating the\\nutility of labellings that granted nothing through it, and advisory parameter\\nhints matched names exactly, so `new_start_time` was authority-bearing while\\n`start_time` was advisory.\\n\\nReporting one number per labelling was also wrong. Two policy thresholds move\\nthe result and interact, so BENCHMARKS.md now reports a 6x5 sweep and the\\nPareto frontier over all thirty configurations, including the rows where this\\ndesign loses. `min_reference_word` moved neither axis at any setting and is\\nrecorded as unpriced rather than as safe.\\n\\nAlso: the proxy could not express path-scoped grants at all, so the\\nconfiguration the documentation recommends was unreachable from the shipped\\nproduct. `source.authoritative_paths`, `min_quotation_length` and\\n`min_reference_word` are now config, and the linter reports a `referenced`\\ngrant no parameter can consume -- inert, and therefore denying everything that\\npath would otherwise have allowed.\\n'\n\nCommit: 'b9595ce3b75e2353ba35a3fbbf4993e7a4b98955'\nAuthor: <git.Actor \"jaisurya93945 <jaisurya3450@gmail.com>\">\nDate: 2026-09-10 16:59:04+00:00\nMessage: 'feat: observe dict keys, and measure the security-utility exchange rate\\n\\nTwo changes and one conclusion.\\n\\nDict keys were never observed. A tool result shaped as\\n{\"events\": {\"5\": {...}}} carries the entity id in the key, so a walk\\nthat visits only leaves never sees it and every follow-up call on that\\nentity was attributable to nothing. Keys are now indexed with their\\ncollection path -- indexed rather than sealed, because rewriting a key\\nwould change the structure the agent has to navigate, and attribution\\nis what refuses an attacker-chosen value anyway. This was the single\\nlargest remaining source of false denials.\\n\\nThe evaluation gains a fourth configuration measuring the documented\\ntreatment of computed magnitudes: amount as content, bounded by a\\nbudget. Banking went from 31.2% to 87.5% utility at 95.8% security.\\n\\nThe conclusion is the point, and it is not a number:\\n\\n  authority granted        security   utility\\n  nothing                    95.4%     34.0%\\n  every kind, everywhere     55.8%     46.4%\\n  per field path             85.7%     68.0%\\n  + budgets for magnitudes   85.1%     76.3%\\n\\nNo configuration reaches 90% security and 70% utility together. The\\nfalsification criterion this project set for itself asked for exactly\\nthat, and it was missed on the security side. REVIEW.md says so in its\\nown title, reports the 95.4% row first in every table, and takes the\\noption that narrows the claim rather than the one that reinterprets the\\nnumber.\\n\\nDeterminism was not the binding constraint. Every bug fixed in this pass\\nbought utility at zero security cost; security fell only where a human\\nwidened a grant. The constraint is that a large fraction of real agent\\nwork is selecting an existing entity -- reschedule that event, share\\nthat file -- and when the directory is untrusted, provenance must either\\nrefuse the selection or trust the directory, which admits an injection\\nnaming a legitimate entry. That is intent, not origin, so oracle\\nprovenance would not resolve it either.\\n\\nThe claim is therefore narrowed rather than restated, in the README, the\\nthreat model and the limitations: IDENSEC contains attacks that\\nintroduce a new destination, and is structurally blind to attacks that\\nselect among legitimate ones. The cost of that blindness is measured.\\n\\nRecorded as a hypothesis rather than a criticism: PACT\\'s reported oracle\\nrow of 100/100 is hard to reconcile with entity-selection workflows,\\nwhich suggests its diagnostic suites may not contain that pattern. We\\ncannot check -- the paper is not reachable from this environment.\\n'\n\nCommit: '13e2cf5d3fccc2a6bb4adaa21759a276bae7cecb'\nAuthor: <git.Actor \"jaisurya93945 <jaisurya3450@gmail.com>\">\nDate: 2026-09-10 11:42:13+00:00\nMessage: 'fix: collect every matching origin, and normalise numeric spellings\\n\\nTwo defects found by working through AgentDojo\\'s remaining refusals.\\n\\nAttribution took only the *first* origin from which a value was\\nderivable. Authority is decided existentially -- a value is admissible\\nif any contributing source is authorised for it -- so stopping at the\\nfirst match hands the checker an unauthorised origin while an authorised\\none exists further down. This denied legitimate calls whose entity id\\nalso happened to appear inside an earlier free-text field. All matching\\norigins are now collected.\\n\\nNumbers reach tools in more spellings than they appear in prose: a tool\\ntakes 4.0 where the principal wrote 4, or 1200 where they wrote 1,200.\\nDerivation now generates exact re-spellings of the same number -- no\\nrounding, no unit conversion, nothing semantic -- and a regression test\\nconfirms the substring-carving bypass stays closed.\\n\\nAlso downgrades two classes of parameter the deriver was over-claiming:\\ncontent names such as location and venue, which decide nothing an\\nattacker benefits from, and filter names such as query and pattern, but\\nonly on read-only tools -- on anything that writes or egresses a \"query\"\\nmay be a command, so the restrictive reading is kept and the linter\\'s\\nno-authority-parameter check is the backstop.\\n\\nUtility 51.5% -> 56.7% at unchanged 92.0% security. Contract derivation\\nstill shows 100% authority recall and zero dangerous misses.\\n\\nThe banking suite\\'s remaining refusals turned out not to be fixable, and\\nthat is the more useful finding: its amounts are *computed*, not quoted.\\n\"Spotify raised prices 10% this month, send them the difference\" yields\\n5.0, which appears nowhere in the instruction. Arithmetic is a semantic\\nderivation and no provenance system can follow it, so treating an amount\\nas authority-bearing denies the legitimate case exactly as often as the\\nattacker\\'s -- accidental security rather than designed security.\\n\\nThe division of labour that does work is now documented and tested:\\nprovenance handles identifiers, budgets handle magnitudes. Let the\\namount be payload and bound it with a Budget; the destination is still\\nattributed, so an attacker-chosen recipient is refused regardless, and\\nno amount can exceed what the principal allowed.\\n'\n\nCommit: 'e448c4559d6aa7fe435559cea81de332e7f3f65a'\nAuthor: <git.Actor \"jaisurya93945 <jaisurya3450@gmail.com>\">\nDate: 2026-09-10 11:33:56+00:00\nMessage: \"feat: measure security and utility against AgentDojo, model-free\\n\\nThe utility cost of argument-level enforcement was this project's\\nlargest unknown and was recorded as blocked on model API access. It was\\nnot blocked: AgentDojo publishes both halves as data. Each injection\\ntask carries the tool call the attacker wants; each user task carries\\nthe calls a correct agent makes. Replaying both measures security and\\nutility with no model anywhere.\\n\\nSecurity is asked in a harsher form than AgentDojo's own metric --\\nAgentDojo measures how often a model is hijacked, we assume it always\\nis. Utility is a lower bound: ground-truth calls are not model\\nbehaviour.\\n\\nResult, best labelling, 97 user tasks and 609 in-scope security cases:\\n92.0% security, 51.5% utility.\\n\\nSource labelling turned out to be the dominant variable, and per-source\\ngrants the wrong shape. Authoritative-for-nothing gave 95.4%/28.9%.\\nAuthoritative-for-everything gave 68.6%/39.2% -- worse on both axes.\\nThe cause is structural: legitimate addresses live in sender,\\nrecipients and participants while every injection lives in description,\\ncontent and reviews, and both arrive from one source. Since provenance\\nwas already recorded per field, authority is now scopable the same way\\nvia Source.authoritative_paths, with segment globs. The travel suite\\nwent from 0% to 100% utility on that change alone. That is a capability\\nthe measurement produced, not a tuning.\\n\\nFour real defects fell out of contact with somebody else's tools:\\nrecipient constrained to email, which failed every IBAN transfer; url\\nconstrained to url, which failed every scheme-less fetch; temporal\\nparameters treated as authority-bearing, the single largest source of\\nfalse denials; and *_id constrained to the uuid kind. UNCLASSIFIED is\\nintroduced so that values with no surface grammar -- a channel name, a\\nhotel name -- can be granted rather than being permanently unauthorised.\\n\\nEvery one of the 49 escapes is explained, and all fall into limitations\\ndocumented before this measurement existed: 20 where the attacker\\nselects a legitimate directory entry, 20 where the target call has no\\nauthority-bearing argument, 8 low-entropy token collisions, plus 20\\nspeech-only injections excluded because an action monitor cannot address\\nspeech. The boundary that yields is the most useful output here:\\nIDENSEC contains attacks that introduce a new destination; it does not\\ncontain attacks that merely select among legitimate ones.\\n\\nThe uncomfortable part is recorded as such rather than as a caveat.\\n51.5% is nearer PACT's deployed row than its oracle row, and REVIEW.md\\nset that as the falsification condition before the number existed. The\\nthesis is not yet disproven -- utility moved 22.7% to 51.5% in one\\nsitting on obvious fixes and has not converged -- but it is now the only\\nroadmap item that matters, and leaving it in a table while building\\nfeatures is the failure mode. LIMITATIONS, RESEARCH, THREAT_MODEL,\\nREVIEW, ROADMAP and the README all say so.\\n\\nEffect classes and scoped grants were hand-authored per API by people\\nwho do not own those APIs. That is precisely the policy-sprawl objection\\nthis project claims to answer, and one afternoon for four APIs does not\\nanswer it. benchmarks/agentdojo/README.md names every artefact we\\nauthored, and the pre-tuning number is reported beside the post-tuning\\none.\\n\"\n",
+       "type": "text"
+      }
+     ],
+     "isError": false
+    },
+    "tool": "git_log"
+   },
+   {
+    "arguments": {
+     "branch_type": "local",
+     "repo_path": "/home/user/idensec"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "* main",
+       "type": "text"
+      }
+     ],
+     "isError": false
+    },
+    "tool": "git_branch"
+   },
+   {
+    "arguments": {
+     "repo_path": "/home/user/idensec",
+     "revision": "9e31e7227b67b6c2bb6d187f33467af6567d9ab9"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "Commit: '9e31e7227b67b6c2bb6d187f33467af6567d9ab9'\nAuthor: <git.Actor \"jaisurya93945 <jaisurya3450@gmail.com>\">\nDate: datetime.datetime(2026, 9, 10, 2, 58, 53, tzinfo=<git.objects.util.tzoffset object at 0x7f8cf621f510>)\nMessage: 'test: fuzz the core invariants with seeded property tests\\n\\nThe milestone review concluded that every bug found so far lived in code\\nthat had been written carefully and tested, and that tests written by\\nthe author of a mechanism test the mechanism the author had in mind.\\nThis attacks the paths nobody thought to write a test for.\\n\\nFive invariants, each a real defect if violated: sealing leaves no\\nrecognised operand in the text handed to the model; the monitor returns\\na verdict rather than raising on arbitrary argument shapes, because a\\nmonitor that crashes fails open in any harness that catches exceptions\\nand carries on; decisions replay identically including the audit chain\\nhead; an authority value from a non-authoritative source is never\\nadmitted; and handles resolve to exactly what was sealed.\\n\\nTwo mirror properties are asserted alongside, because a monitor that\\nrefused everything would satisfy the security invariants and be\\nworthless: prose carrying no identifiers passes through byte-for-byte,\\nand a source that *is* authoritative still works.\\n\\nSeeded random rather than a property-testing dependency. The library has\\nno runtime dependencies and its suite should not need one either, and a\\nfixed seed makes a failure reproducible from the test name alone.\\n\\n204 cases in the suite. A separate campaign over 2000 seeds and 25125\\noperations found no violations, which is evidence rather than proof --\\nthe generators only produce inputs we thought to generate.\\n'\n\n--- None\n+++ tests/test_fuzz.py\n@@ -0,0 +1,328 @@\n+\"\"\"Property-based fuzzing of the core invariants.\n+\n+The milestone review concluded that every bug found so far lived in code that\n+had been written carefully and tested, and that tests written by the author of a\n+mechanism test the mechanism the author had in mind. This file exists to attack\n+the paths nobody thought to write a test for.\n+\n+Seeded ``random`` rather than a property-testing dependency: the library has no\n+runtime dependencies and its test suite should not need one either, and a fixed\n+seed makes a failure reproducible from the test name alone. Seeds are listed\n+explicitly so a failing case can be re-run in isolation.\n+\n+Five invariants, each of which would be a real defect if violated:\n+\n+1. **Sealing is complete.** After observing untrusted content, no operand the\n+   extractor recognised survives in the text handed to the model.\n+2. **The monitor never raises.** Arbitrary argument shapes produce a verdict,\n+   not a traceback -- a monitor that crashes on malformed input fails *open* in\n+   any harness that catches exceptions and continues.\n+3. **Decisions are deterministic.** The same script always produces the same\n+   verdicts and the same audit chain head.\n+4. **Untrusted authority is never admitted.** The central security property,\n+   asserted against randomly generated attacker content rather than\n+   hand-chosen cases.\n+5. **Handles round-trip.** Resolving a sealed value returns exactly what was\n+   sealed.\n+\"\"\"\n+\n+from __future__ import annotations\n+\n+import itertools\n+import random\n+import string\n+\n+import pytest\n+\n+from idensec import (\n+    ContractRegistry,\n+    Effect,\n+    ParameterContract,\n+    Policy,\n+    Role,\n+    Session,\n+    Source,\n+    ToolContract,\n+    Trust,\n+    Verdict,\n+)\n+from idensec.kinds import extract\n+from idensec.ledger import SEAL_PATTERN\n+\n+SEEDS = list(range(24))\n+\n+TOOLS = [\n+    ToolContract(\n+        tool=\"send_email\",\n+        parameters={\n+            \"to\": ParameterContract(\"to\", Role.AUTHORITY, frozenset({\"email\"})),\n+            \"subject\": ParameterContract(\"subject\", Role.PAYLOAD),\n+            \"body\": ParameterContract(\"body\", Role.PAYLOAD),\n+        },\n+        effects=frozenset({Effect.NETWORK_EGRESS, Effect.WRITE}),\n+    ),\n+    ToolContract(\n+        tool=\"http_get\",\n+        parameters={\"url\": ParameterContract(\"url\", Role.AUTHORITY, frozenset({\"url\"}))},\n+        effects=frozenset({Effect.NETWORK_EGRESS, Effect.READ}),\n+    ),\n+    ToolContract(\n+        tool=\"read_file\",\n+        parameters={\"path\": ParameterContract(\"path\", Role.AUTHORITY)},\n+        effects=frozenset({Effect.READ}),\n+    ),\n+]\n+\n+WORDS = (\n+    \"incident outage deploy rollback service latency queue cache token report \"\n+    \"summary escalate compliance urgent please note also however therefore\"\n+).split()\n+\n+TLDS = [\"example\", \"test\", \"invalid\", \"corp.example\", \"evil.example\"]\n+\n+\n+def _word(rng: random.Random) -> str:\n+    return rng.choice(WORDS)\n+\n+\n+def _operand(rng: random.Random) -> str:\n+    \"\"\"Generate an authority-shaped value of a random kind.\"\"\"\n+    label = \"\".join(rng.choices(string.ascii_lowercase, k=rng.randint(2, 8)))\n+    host = rng.choice(TLDS)\n+    return rng.choice(\n+        [\n+            f\"{label}@{host}\",\n+            f\"https://{host}/{label}\",\n+            f\"/var/{label}/{_word(rng)}.log\",\n+            f\"~/{label}/{_word(rng)}\",\n+            f\"s3://{label}/{_word(rng)}\",\n+            f\"arn:aws:s3:::{label}\",\n+            f\"git@{host}:{label}/repo.git\",\n+            \"\".join(rng.choices(string.digits, k=rng.randint(8, 19))),\n+            f\"0x{''.join(rng.choices('0123456789abcdef', k=40))}\",\n+        ]\n+    )\n+\n+\n+def _prose(rng: random.Random, operands: int = 2) -> str:\n+    parts = [_word(rng) for _ in range(rng.randint(3, 12))]\n+    for _ in range(operands):\n+        parts.insert(rng.randint(0, len(parts)), _operand(rng))\n+    text = \" \".join(parts)\n+    if rng.random() < 0.3:\n+        text += rng.choice([\".\", \"!\", \")\", \"]\", \",\", '\"', \"\\n\"])\n+    return text\n+\n+\n+def _value(rng: random.Random, depth: int = 0):\n+    \"\"\"An arbitrary argument value, including shapes a tool should never send.\"\"\"\n+    choices = [\"str\", \"int\", \"float\", \"bool\", \"none\", \"operand\"]\n+    if depth < 2:\n+        choices += [\"list\", \"dict\"]\n+    kind = rng.choice(choices)\n+    if kind == \"str\":\n+        return _prose(rng, operands=rng.randint(0, 1))\n+    if kind == \"operand\":\n+        return _operand(rng)\n+    if kind == \"int\":\n+        return rng.randint(-10**6, 10**6)\n+    if kind == \"float\":\n+        return rng.uniform(-1e4, 1e4)\n+    if kind == \"bool\":\n+        return rng.random() < 0.5\n+    if kind == \"none\":\n+        return None\n+    if kind == \"list\":\n+        return [_value(rng, depth + 1) for _ in range(rng.randint(0, 3))]\n+    return {_word(rng): _value(rng, depth + 1) for _ in range(rng.randint(0, 3))}\n+\n+\n+def _session(seed: int, policy: Policy | None = None) -> Session:\n+    counter = itertools.count(1)\n+    return Session(\n+        contracts=ContractRegistry(TOOLS),\n+        policy=policy or Policy(denial_budget=-1),\n+        sources=[\n+            Source(\"principal\", Trust.USER_INPUT),\n+            Source(\"web\", Trust.TOOL_UNTRUSTED),\n+            Source(\"directory\", Trust.TOOL_TRUSTED, authoritative_for=frozenset({\"email\"})),\n+        ],\n+        id_factory=lambda: f\"{next(counter):016x}\",\n+        session_id=f\"fuzz-{seed}\",\n+    )\n+\n+\n+class TestSealingIsComplete:\n+    @pytest.mark.parametrize(\"seed\", SEEDS)\n+    def test_no_recognised_operand_survives_untrusted_observation(self, seed: int) -> None:\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        for _ in range(20):\n+            text = _prose(rng, operands=rng.randint(0, 3))\n+            expected = {m.value for m in extract(text)}\n+            sealed = session.observe(\"web\", text)\n+            for value in expected:\n+                assert value not in sealed, (\n+                    f\"operand {value!r} survived sealing in {sealed!r}\"\n+                )\n+\n+    @pytest.mark.parametrize(\"seed\", SEEDS[:12])\n+    def test_sealed_text_contains_one_handle_per_operand(self, seed: int) -> None:\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        for _ in range(20):\n+            text = _prose(rng, operands=rng.randint(0, 3))\n+            count = len(extract(text))\n+            sealed = session.observe(\"web\", text)\n+            assert len(SEAL_PATTERN.findall(sealed)) == count\n+\n+    @pytest.mark.parametrize(\"seed\", SEEDS[:12])\n+    def test_prose_without_operands_is_returned_unchanged(self, seed: int) -> None:\n+        \"\"\"Sealing must be a no-op on text carrying no identifiers -- the\n+        property that makes seal-everything safe at the protocol layer.\"\"\"\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        for _ in range(20):\n+            text = \" \".join(_word(rng) for _ in range(rng.randint(3, 20)))\n+            if extract(text):\n+                continue\n+            assert session.observe(\"web\", text) == text\n+\n+\n+class TestMonitorNeverRaises:\n+    @pytest.mark.parametrize(\"seed\", SEEDS)\n+    def test_arbitrary_arguments_produce_a_verdict(self, seed: int) -> None:\n+        \"\"\"A monitor that crashes on malformed input fails *open* in any\n+        harness that catches exceptions and carries on.\"\"\"\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        session.observe(\"principal\", _prose(rng, operands=2))\n+        for _ in range(30):\n+            contract = rng.choice(TOOLS)\n+            arguments = {\n+                name: _value(rng) for name in contract.parameters if rng.random() < 0.9\n+            }\n+            if rng.random() < 0.2:\n+                arguments[_word(rng)] = _value(rng)  # a parameter no contract declares\n+            decision = session.admit(contract.tool, arguments)\n+            assert decision.verdict in (Verdict.ALLOW, Verdict.DENY, Verdict.ESCALATE)\n+\n+    @pytest.mark.parametrize(\"seed\", SEEDS[:12])\n+    def test_unknown_tools_and_empty_arguments_are_handled(self, seed: int) -> None:\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        for _ in range(15):\n+            session.admit(_word(rng), {})\n+            session.admit(_word(rng), {_word(rng): _value(rng)})\n+\n+    @pytest.mark.parametrize(\"seed\", SEEDS[:12])\n+    def test_hostile_handle_shaped_arguments(self, seed: int) -> None:\n+        \"\"\"Forged, truncated and malformed handles must all resolve to a\n+        verdict rather than an exception.\"\"\"\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        session.observe(\"principal\", _prose(rng))\n+        for _ in range(20):\n+            forged = rng.choice(\n+                [\n+                    \"[[idn:email:\" + \"\".join(rng.choices(\"0123456789abcdef\", k=16)) + \"]]\",\n+                    \"[[idn:email:tooshort]]\",\n+                    \"[[idn:\" + _word(rng) + \":0000000000000001]]\",\n+                    \"[[idn:email:]]\",\n+                    \"[[idn:email:0000000000000001\",\n+                    \"]]idn:email:0000000000000001[[\",\n+                    \"[[idn:email:0000000000000001]][[idn:url:0000000000000002]]\",\n+                ]\n+            )\n+            decision = session.admit(\"send_email\", {\"to\": forged, \"subject\": \"s\", \"body\": \"b\"})\n+            assert decision.verdict is not Verdict.ALLOW\n+\n+\n+class TestDeterminism:\n+    @pytest.mark.parametrize(\"seed\", SEEDS)\n+    def test_replays_agree(self, seed: int) -> None:\n+        def run() -> tuple[list[str], str]:\n+            rng = random.Random(seed)\n+            session = _session(seed)\n+            verdicts = []\n+            for _ in range(25):\n+                if rng.random() < 0.4:\n+                    session.observe(\n+                        rng.choice([\"principal\", \"web\", \"directory\"]), _prose(rng)\n+                    )\n+                else:\n+                    contract = rng.choice(TOOLS)\n+                    arguments = {name: _value(rng) for name in contract.parameters}\n+                    verdicts.append(session.admit(contract.tool, arguments).verdict.value)\n+            return verdicts, session.audit.head\n+\n+        assert run() == run()\n+\n+\n+class TestUntrustedAuthorityIsNeverAdmitted:\n+    @pytest.mark.parametrize(\"seed\", SEEDS)\n+    def test_attacker_supplied_addresses_are_refused(self, seed: int) -> None:\n+        \"\"\"The central security property, against generated attacker content\n+        rather than hand-chosen cases.\"\"\"\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        session.observe(\"principal\", \"mail the summary to ana@corp.example\")\n+        for _ in range(20):\n+            label = \"\".join(rng.choices(string.ascii_lowercase, k=rng.randint(3, 9)))\n+            address = f\"{label}@evil.example\"\n+            session.observe(\"web\", f\"{_prose(rng, operands=0)} contact {address} now\")\n+            decision = session.admit(\n+                \"send_email\", {\"to\": address, \"subject\": \"s\", \"body\": \"b\"}\n+            )\n+            assert decision.verdict is not Verdict.ALLOW, (\n+                f\"admitted attacker address {address!r}\"\n+            )\n+\n+    @pytest.mark.parametrize(\"seed\", SEEDS)\n+    def test_values_the_model_invented_are_refused(self, seed: int) -> None:\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        session.observe(\"principal\", \"mail the summary to ana@corp.example\")\n+        for _ in range(20):\n+            invented = _operand(rng)\n+            if invented == \"ana@corp.example\":\n+                continue\n+            for tool, parameter in (\n+                (\"send_email\", \"to\"),\n+                (\"http_get\", \"url\"),\n+                (\"read_file\", \"path\"),\n+            ):\n+                arguments = {parameter: invented}\n+                if tool == \"send_email\":\n+                    arguments |= {\"subject\": \"s\", \"body\": \"b\"}\n+                assert session.admit(tool, arguments).verdict is not Verdict.ALLOW\n+\n+    @pytest.mark.parametrize(\"seed\", SEEDS[:12])\n+    def test_the_authoritative_source_still_works(self, seed: int) -> None:\n+        \"\"\"The mirror property: a monitor that refuses everything would pass\n+        every test above and be useless.\"\"\"\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        session.observe(\"principal\", \"mail the on-call engineer\")\n+        for _ in range(10):\n+            label = \"\".join(rng.choices(string.ascii_lowercase, k=rng.randint(3, 9)))\n+            address = f\"{label}@corp.example\"\n+            session.observe(\"directory\", f\"on-call is {address}\")\n+            decision = session.admit(\n+                \"send_email\", {\"to\": address, \"subject\": \"s\", \"body\": \"b\"}\n+            )\n+            assert decision.verdict is Verdict.ALLOW, decision.reason()\n+\n+\n+class TestHandlesRoundTrip:\n+    @pytest.mark.parametrize(\"seed\", SEEDS)\n+    def test_resolution_returns_exactly_what_was_sealed(self, seed: int) -> None:\n+        rng = random.Random(seed)\n+        session = _session(seed)\n+        for _ in range(25):\n+            value = _operand(rng)\n+            matches = extract(value)\n+            if len(matches) != 1 or matches[0].value != value:\n+                continue  # not a clean single-operand string; not this test's case\n+            sealed = session.observe(\"web\", value)\n+            assert session.ledger.resolve(sealed).text == value\n",
+       "type": "text"
+      }
+     ],
+     "isError": false
+    },
+    "tool": "git_show"
+   }
+  ],
+  "server": {
+   "name": "mcp-git",
+   "version": "1.30.0"
+  }
+ },
+ "memory": {
+  "results": [
+   {
+    "arguments": {
+     "entities": [
+      {
+       "entityType": "person",
+       "name": "ana.ramos@corp.example",
+       "observations": [
+        "owns https://intranet.corp.example/handbook/v4"
+       ]
+      }
+     ]
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "[]",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "entities": []
+     }
+    },
+    "tool": "create_entities"
+   },
+   {
+    "arguments": {},
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "{\n  \"entities\": [\n    {\n      \"name\": \"ana.ramos@corp.example\",\n      \"entityType\": \"person\",\n      \"observations\": [\n        \"owns https://intranet.corp.example/handbook/v4\"\n      ]\n    }\n  ],\n  \"relations\": []\n}",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "entities": [
+       {
+        "entityType": "person",
+        "name": "ana.ramos@corp.example",
+        "observations": [
+         "owns https://intranet.corp.example/handbook/v4"
+        ]
+       }
+      ],
+      "relations": []
+     }
+    },
+    "tool": "read_graph"
+   },
+   {
+    "arguments": {
+     "query": "person"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "{\n  \"entities\": [\n    {\n      \"name\": \"ana.ramos@corp.example\",\n      \"entityType\": \"person\",\n      \"observations\": [\n        \"owns https://intranet.corp.example/handbook/v4\"\n      ]\n    }\n  ],\n  \"relations\": []\n}",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "entities": [
+       {
+        "entityType": "person",
+        "name": "ana.ramos@corp.example",
+        "observations": [
+         "owns https://intranet.corp.example/handbook/v4"
+        ]
+       }
+      ],
+      "relations": []
+     }
+    },
+    "tool": "search_nodes"
+   }
+  ],
+  "server": {
+   "name": "memory-server",
+   "version": "0.6.3"
+  }
+ },
+ "sequential": {
+  "results": [
+   {
+    "arguments": {
+     "nextThoughtNeeded": false,
+     "thought": "Check whether ana.ramos@corp.example signed.",
+     "thoughtNumber": 1,
+     "totalThoughts": 1
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "{\n  \"thoughtNumber\": 1,\n  \"totalThoughts\": 1,\n  \"nextThoughtNeeded\": false,\n  \"branches\": [],\n  \"thoughtHistoryLength\": 1\n}",
+       "type": "text"
+      }
+     ],
+     "structuredContent": {
+      "branches": [],
+      "nextThoughtNeeded": false,
+      "thoughtHistoryLength": 1,
+      "thoughtNumber": 1,
+      "totalThoughts": 1
+     }
+    },
+    "tool": "sequentialthinking"
+   }
+  ],
+  "server": {
+   "name": "sequential-thinking-server",
+   "version": "2026.8.31"
+  }
+ },
+ "time": {
+  "results": [
+   {
+    "arguments": {
+     "timezone": "UTC"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "{\n  \"timezone\": \"UTC\",\n  \"datetime\": \"2026-09-12T11:06:34+00:00\",\n  \"day_of_week\": \"Saturday\",\n  \"is_dst\": false\n}",
+       "type": "text"
+      }
+     ],
+     "isError": false
+    },
+    "tool": "get_current_time"
+   },
+   {
+    "arguments": {
+     "source_timezone": "UTC",
+     "target_timezone": "America/New_York",
+     "time": "12:00"
+    },
+    "error": null,
+    "result": {
+     "content": [
+      {
+       "text": "{\n  \"source\": {\n    \"timezone\": \"UTC\",\n    \"datetime\": \"2026-09-12T12:00:00+00:00\",\n    \"day_of_week\": \"Saturday\",\n    \"is_dst\": false\n  },\n  \"target\": {\n    \"timezone\": \"America/New_York\",\n    \"datetime\": \"2026-09-12T08:00:00-04:00\",\n    \"day_of_week\": \"Saturday\",\n    \"is_dst\": true\n  },\n  \"time_difference\": \"-4.0h\"\n}",
+       "type": "text"
+      }
+     ],
+     "isError": false
+    },
+    "tool": "convert_time"
+   }
+  ],
+  "server": {
+   "name": "mcp-time",
+   "version": "1.30.0"
+  }
+ }
+}

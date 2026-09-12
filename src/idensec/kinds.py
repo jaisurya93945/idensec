@@ -36,9 +36,9 @@ __all__ = [
     "register_kind",
 ]
 
-# Extensions that look like the tail of a hostname but are not one. Without
-# this, "report.txt" and "main.py" are extracted as hostnames, which is a
-# utility disaster and makes tool output unreadable.
+# Extensions that collide with real two-letter ccTLDs. ".py" is Paraguay, ".md"
+# is Moldova, ".sh" is St Helena, ".io" is the Indian Ocean Territory -- so the
+# TLD allowlist below cannot separate "main.py" from a hostname on its own.
 _NON_HOST_SUFFIXES = frozenset(
     (
         "txt", "md", "markdown", "json", "jsonl", "yaml", "yml", "toml", "ini", "cfg",
@@ -51,6 +51,45 @@ _NON_HOST_SUFFIXES = frozenset(
     )
 )
 
+_HOST_TLDS = frozenset(
+    (
+        # The generic names that carry almost all real traffic.
+        "com", "org", "net", "edu", "gov", "mil", "int", "info", "biz", "name",
+        "pro", "app", "dev", "cloud", "tech", "online", "site", "store", "shop",
+        "blog", "news", "email", "xyz", "top", "live", "team", "systems",
+        "services", "solutions", "digital", "network", "software", "page",
+        "space", "world", "media", "agency", "group", "company", "tools",
+        # Reserved and special-use (RFC 2606, RFC 6761, RFC 7686).
+        "example", "invalid", "test", "localhost", "local", "onion",
+        # Conventional private suffixes. A corporate intranet is exactly the
+        # sort of source an operator grants authority over.
+        "internal", "intranet", "corp", "lan", "home",
+    )
+)
+"""Final labels a bare dotted name may end in to be read as a hostname.
+
+An **allowlist**, replacing the blocklist of file extensions that used to sit
+here. The blocklist was the wrong shape and the shape was the bug: it tried to
+enumerate what a hostname is *not*, so anything unlisted was a hostname. Against
+real MCP tool output that meant ``Role.AUTHORITY``, ``json.dumps``,
+``time.time`` and ``pytest.mark.parametrize`` were all sealed as hostnames --
+that is, every line of Python or JavaScript an agent reads.
+
+Two-letter labels are accepted without listing them, because every ccTLD is two
+letters. That alone is not enough: ``.py``, ``.md``, ``.sh``, ``.go`` and ``.rs``
+are *both* ccTLDs and the file extensions an agent reads all day, so
+:data:`_NON_HOST_SUFFIXES` still has to veto them. Neither filter works without
+the other, and removing the blocklist in favour of the allowlist immediately
+turned ``main.py`` back into a hostname.
+
+The cost is real and is the same trade already made for ``ipv4``: a hostname
+under a gTLD not listed here is not sealed. **A missed seal is not a bypass** --
+an unsealed untrusted value still matches its source observation at the write
+boundary and is refused by the unattributed rule (ADR-0007) -- whereas a false
+positive mangles the source code that coding agents spend all day reading.
+``docs/BENCHMARKS.md`` prices both directions rather than arguing about them.
+"""
+
 
 def _strip_trailing_punctuation(value: str) -> str:
     """URLs in prose absorb the sentence's punctuation. Give it back."""
@@ -62,6 +101,25 @@ def _strip_trailing_punctuation(value: str) -> str:
         opener = {")": "(", "]": "[", "}": "{"}[value[-1]]
         if value.count(opener) >= value.count(value[-1]):
             break
+        value = value[:-1]
+    return value
+
+
+def _strip_path_punctuation(value: str) -> str:
+    """Give a path back the sentence punctuation it absorbed.
+
+    Separate from :func:`_strip_trailing_punctuation` because that one loops,
+    and a path may legitimately *end* in dots: ``../..`` would be eaten down to
+    nothing. So ``,;:!?`` are stripped repeatedly and a full stop is stripped
+    once, and only when the final segment is not ``.`` or ``..``.
+
+    Found against real tool output, where ``~/.ssh/id_ed25519.`` at the end of a
+    sentence was sealed with the full stop attached -- so the handle resolved to
+    a value the agent would never pass back.
+    """
+    while value and value[-1] in ",;:!?":
+        value = value[:-1]
+    if value.endswith(".") and value.rsplit("/", 1)[-1] not in (".", ".."):
         value = value[:-1]
     return value
 
@@ -88,8 +146,14 @@ class OperandKind:
     def normalise(self, value: str) -> str:
         value = value.strip()
         if self.strip_punctuation:
-            value = _strip_trailing_punctuation(value)
+            value = self._stripper(value)
         return value if self.case_sensitive else value.casefold()
+
+    @property
+    def _stripper(self):  # type: ignore[no-untyped-def]
+        return _strip_path_punctuation if "path" in self.name else (
+            _strip_trailing_punctuation
+        )
 
     def accepts(self, value: str) -> bool:
         """Full-match test, used when attributing a whole argument value."""
@@ -246,6 +310,7 @@ for _k in (
         r"(?<![\w./~\-])(?:~|\.{1,2})?/(?:[A-Za-z_.][\w.\-+@%]*)(?:/[\w.\-+@%]*)*",
         30,
         case_sensitive=True,
+        strip_punctuation=True,
         description="POSIX path: absolute, home-relative (~/...), or relative "
         "(./... and ../...). Relative forms matter because '../../etc/shadow' "
         "is a traversal, and a traversal is an authority decision.",
@@ -335,8 +400,12 @@ deployment:
 def _plausible(kind: str, value: str) -> bool:
     """Post-filters that are clearer as code than as regex."""
     if kind == "hostname":
-        # Without this, every "report.txt" in a tool result becomes a handle.
-        return value.rsplit(".", 1)[-1].casefold() not in _NON_HOST_SUFFIXES
+        # Without this, every "report.txt" and every "json.dumps" in a tool
+        # result becomes a handle. See _HOST_TLDS for why this is an allowlist.
+        tld = value.rsplit(".", 1)[-1].casefold()
+        if tld in _NON_HOST_SUFFIXES:
+            return False
+        return len(tld) == 2 or tld in _HOST_TLDS
     if kind == "posix_path":
         # "/" alone or "/x" carry little authority and match too much prose.
         return value.count("/") >= 2 or len(value) >= 5
@@ -377,7 +446,7 @@ def extract(text: str, kinds: Sequence[str] | None = None) -> list[Match]:
             start, end = m.start(), m.end()
             raw = m.group(0)
             if kind.strip_punctuation:
-                stripped = _strip_trailing_punctuation(raw)
+                stripped = kind._stripper(raw)
                 end -= len(raw) - len(stripped)
                 raw = stripped
             if not raw or not _plausible(kind.name, raw):

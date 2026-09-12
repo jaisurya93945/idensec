@@ -182,6 +182,20 @@ Demonstrated in `tests/test_budget.py::TestComputedAmounts`.
 
 The cost is that the budget must be *stated*, which is §4.4 again.
 
+### 4.2d Extraction false positives cost readability, and one class was large
+
+Measured against real MCP tool output: the `hostname` filter
+was a **blocklist** of file extensions, so anything unlisted was a hostname and
+`Role.AUTHORITY`, `json.dumps` and `time.time` were sealed — **151 of 244
+operands**, which is every line of Python or JavaScript an agent reads. Replaced
+with a TLD allowlist; spurious extractions went to zero at no cost to recall.
+
+What remains: `account_number` is `\d{8,19}`, and four of its six hits in that
+corpus are false (`9007199254740991` is JavaScript's `MAX_SAFE_INTEGER`). It is
+kept in the defaults because one code-heavy corpus is not grounds for weakening
+a default and because removing it breaks any contract that declares the kind —
+not because the rate is acceptable. See [`BENCHMARKS.md`](BENCHMARKS.md).
+
 ### 4.3 Extraction coverage is a security parameter
 
 A value whose kind is not registered is never sealed. Nine kinds ship by

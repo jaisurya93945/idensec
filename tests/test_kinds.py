@@ -192,3 +192,51 @@ class TestRegistry:
     def test_unknown_kind_raises(self) -> None:
         with pytest.raises(KeyError, match="unregistered"):
             resolve_kinds(["not_a_kind"])
+
+
+class TestFoundAgainstRealToolOutput:
+    """Defects that seven published MCP servers produced and a synthetic corpus
+    never did. Each is a regression test for a specific captured response."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "role.AUTHORITY and Effect.WRITE",
+            "json.dumps(value)",
+            "time.time()",
+            "pytest.mark.parametrize",
+            "noun.endswith(suffix)",
+            "contract.effects",
+        ],
+    )
+    def test_dotted_code_identifiers_are_not_hostnames(self, text: str) -> None:
+        """The blocklist of file extensions was the wrong shape: anything not
+        listed was a hostname, so every line of Python an agent reads was
+        sealed. Against real `git show` output this fired 151 times."""
+        assert not [m for m in extract(text, DEFAULT_KINDS) if m.kind == "hostname"]
+
+    @pytest.mark.parametrize(
+        "text", ["mail ana@corp.example", "see wiki.internal", "https://a.co/x"]
+    )
+    def test_real_hostnames_still_extract(self, text: str) -> None:
+        assert extract(text, DEFAULT_KINDS)
+
+    @pytest.mark.parametrize(
+        "name", ["main.py", "notes.md", "build.sh", "server.go", "lib.rs", "app.ts"]
+    )
+    def test_extensions_that_are_also_cctlds_are_not_hostnames(self, name: str) -> None:
+        """`.py` is Paraguay, `.md` Moldova, `.sh` St Helena. Accepting every
+        two-letter label as a ccTLD put these straight back."""
+        assert not [
+            m for m in extract(f"open {name} please", DEFAULT_KINDS)
+            if m.kind == "hostname"
+        ]
+
+    def test_a_path_does_not_absorb_a_full_stop(self) -> None:
+        found = extract("the deploy key at ~/.ssh/id_ed25519.", DEFAULT_KINDS)
+        assert [m.value for m in found] == ["~/.ssh/id_ed25519"]
+
+    def test_a_path_that_ends_in_dots_keeps_them(self) -> None:
+        """`../..` is a traversal, and a stripper that looped would eat it."""
+        found = extract("go up with ../.. first", DEFAULT_KINDS)
+        assert [m.value for m in found] == ["../.."]

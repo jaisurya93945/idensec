@@ -648,6 +648,66 @@ what makes that absence survivable.
 
 ---
 
+## Thread 3h — The read boundary against real tool output (2026-09-12)
+
+`EXPERIMENT` — Captured 23 read-only `tools/call` responses from six
+locally-launched MCP servers and ran them through `observe()`. Corpus at
+`benchmarks/data/mcp_results.json`, with `git_show` pinned to a fixed revision
+so the fixture does not change under us.
+
+`RESULT` — **Sealing is lossless, and now provably so on data we did not
+write.** Resolving every handle reproduces the original byte for byte. "Prose
+passes through untouched" has been asserted in this repository since the first
+commit; it is a checked property from now on, gated in CI.
+
+`RESULT` — **One intended exception, found on the first run.** A `git show` of
+this repository contains `[[idn:email:…]]`, because the threat model documents
+the handle syntax, and the read boundary defuses handle-shaped untrusted text
+(T05). A repository that documents its own escape syntax is the most natural
+source of decoys there is, and we had never tested against one.
+
+`RESULT` (**the real finding**) — **The `hostname` filter was a blocklist, and
+sealed 151 of 244 operands spuriously.** `Role.AUTHORITY`, `json.dumps`,
+`time.time`, `pytest.mark.parametrize` — every dotted identifier in every line
+of Python or JavaScript an agent reads. The pattern accepted any `label.label`
+and vetoed a list of file extensions, so anything unlisted was a hostname.
+
+`INFERENCE` — The shape was the bug, and it is a shape this project criticises
+by name elsewhere. On the pinned corpus the fix is reproducible as sealing
+density over a source diff: **6.6% to 1.1%** on identical input. [`ROADMAP.md`](ROADMAP.md) declines to build a
+prompt-injection classifier because "a control with an attacker-searchable
+false-negative rate is a filter, not a boundary" — and then shipped a blocklist
+in the extractor. **Enumerating what something is not is the same mistake
+wherever it appears.** Replaced with a TLD allowlist: spurious extractions
+151 → 0, synthetic recall unchanged at 93%, false positives still 0/16.
+
+`FACT` — Neither filter works alone. `.py` is Paraguay, `.md` Moldova, `.sh`
+St Helena, `.io` the British Indian Ocean Territory: accepting every two-letter
+label as a ccTLD put `main.py` straight back. The allowlist handles dotted
+identifiers, the extension blocklist handles the ccTLD collisions, and the
+measurement is what showed that both are load-bearing.
+
+`RESULT` — Two smaller defects: paths absorbed the sentence's full stop
+(`~/.ssh/id_ed25519.`), so the handle resolved to a value the agent would never
+pass back; and `account_number` matched `9007199254740991`, JavaScript's
+`MAX_SAFE_INTEGER`. The first is fixed. The second is **not**, and the reason is
+recorded: one code-heavy corpus is not grounds for weakening a default, removing
+the kind breaks contracts that declare it, and the admission verdict is
+unchanged either way — which was checked, not assumed.
+
+`FACT` — `everything.get-env` advertises `readOnlyHint: true`, is genuinely
+read-only, and is the one call in the corpus that must never be captured,
+because it returns the process environment. Read-only is not the same as safe,
+and the annotation that would have told a monitor to relax is attached to
+exactly that tool.
+
+`FACT` — Six servers, one of them reading a fixture this benchmark wrote, is not
+representative traffic. Sealing density ranges from 0% (`time`) to 43%
+(`memory`) across them, which is the honest answer to anyone wanting a single
+number for what sealing costs.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

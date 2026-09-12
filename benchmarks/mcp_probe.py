@@ -18,8 +18,19 @@ from typing import Any
 KEEP = ("name", "description", "inputSchema", "annotations")
 
 
-def probe(argv: Sequence[str], timeout: float = 120) -> dict[str, Any] | None:
-    """Handshake with one server and return its advertised tools."""
+def probe(
+    argv: Sequence[str],
+    timeout: float = 120,
+    calls: Sequence[tuple[str, dict[str, Any]]] = (),
+) -> dict[str, Any] | None:
+    """Handshake with one server, list its tools, and optionally call some.
+
+    ``calls`` is a list of ``(tool, arguments)`` to invoke after the handshake.
+    Every call in the corpus is read-only and local: the servers are launched by
+    this process, the filesystem server is pointed at a directory this benchmark
+    writes itself, and nothing reaches a third party. That is a constraint on
+    what may be captured, not an accident of what was convenient.
+    """
     process = subprocess.Popen(  # noqa: S603 - argv comes from this file
         list(argv),
         stdin=subprocess.PIPE,
@@ -69,13 +80,37 @@ def probe(argv: Sequence[str], timeout: float = 120) -> dict[str, Any] | None:
             if message is None:
                 return None
             if message.get("id") == 2:
-                return {
+                captured = {
                     "server": handshake.get("result", {}).get("serverInfo", {}),
                     "tools": [
                         {k: tool[k] for k in KEEP if k in tool}
                         for tool in message.get("result", {}).get("tools", [])
                     ],
                 }
+                break
+
+        results = []
+        for index, (tool, arguments) in enumerate(calls, start=3):
+            send({
+                "jsonrpc": "2.0", "id": index, "method": "tools/call",
+                "params": {"name": tool, "arguments": arguments},
+            })
+            deadline = time.time() + timeout
+            while True:
+                message = read(deadline)
+                if message is None:
+                    break
+                if message.get("id") == index:
+                    results.append({
+                        "tool": tool,
+                        "arguments": arguments,
+                        "result": message.get("result"),
+                        "error": message.get("error"),
+                    })
+                    break
+        if results:
+            captured["results"] = results
+        return captured
     finally:
         process.terminate()
         try:
