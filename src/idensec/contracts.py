@@ -97,6 +97,18 @@ class ParameterContract:
     Narrowing it is a real control: declaring ``to`` as ``{"email"}`` means a
     source authoritative only for ``uuid`` cannot fill it.
     """
+    collection: str = ""
+    """Which directory this parameter's value is an id *of*, as a field-path
+    glob over observed data -- ``"**.files"``, ``"inbox.emails"``.
+
+    Only reference binding reads it, and without it reference binding does not
+    fire at all. That is not a default worth softening: ids are unique inside a
+    collection and nowhere else, so a value meaning *calendar event 13* and a
+    value meaning *file 13* are the same three characters. Measured against
+    AgentDojo, binding an id without knowing its collection let an instruction
+    naming a calendar event authorise deleting an unrelated file -- the
+    mechanism's own escape, found by running it.
+    """
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -107,6 +119,8 @@ class ParameterContract:
         out: dict[str, Any] = {"role": self.role.value}
         if self.kinds:
             out["kinds"] = sorted(self.kinds)
+        if self.collection:
+            out["collection"] = self.collection
         if self.description:
             out["description"] = self.description
         return out
@@ -175,6 +189,7 @@ class ToolContract:
                 name=name,
                 role=Role(spec["role"]),
                 kinds=frozenset(spec.get("kinds", ())),
+                collection=spec.get("collection", ""),
                 description=spec.get("description", ""),
             )
             for name, spec in data.get("parameters", {}).items()
@@ -474,7 +489,16 @@ def derive_contract(
             role = Role.PAYLOAD
         elif lowered in _DANGEROUS_FLAGS:
             role = Role.AUTHORITY
-        elif lowered in _ADVISORY_HINTS:
+        elif any(
+            hint == lowered or hint in lowered.split("_") for hint in _ADVISORY_HINTS
+        ):
+            # Token-wise, not exact. ``new_start_time`` is the same parameter as
+            # ``start_time`` with a prefix, and enumerating every prefix a server
+            # might use is a losing game -- AgentDojo alone supplied
+            # ``new_start_time``, ``new_end_time`` and ``new_day``. Splitting on
+            # ``_`` rather than substring-matching keeps ``backend_host`` out of
+            # it, and the identifier-suffix branch above still wins, so
+            # ``order_id`` and ``start_url`` stay AUTHORITY.
             role = Role.ADVISORY
         elif any(hint == lowered or hint in lowered.split("_") for hint in _PAYLOAD_HINTS):
             role = Role.PAYLOAD
@@ -488,6 +512,7 @@ def derive_contract(
             name=name,
             role=role,
             kinds=_kinds_for(name) if role is Role.AUTHORITY else frozenset(),
+            collection=_collection_for(name) if role is Role.AUTHORITY else "",
             description=(prop.get("description", "") if isinstance(prop, Mapping) else ""),
         )
 
@@ -498,6 +523,30 @@ def derive_contract(
         default_role=Role.AUTHORITY,
         description=description or (schema.get("description", "") if schema else ""),
     )
+
+
+def _collection_for(name: str) -> str:
+    """Draft which directory an ``<thing>_id`` parameter addresses.
+
+    ``file_id`` addresses files, ``event_id`` events, ``message_ids`` messages.
+    The draft is a glob over observed field paths, so it matches wherever the
+    server actually puts that directory (``cloud_drive.files``, ``files``).
+
+    Drafted rather than inferred-and-trusted, like every other field the
+    deriver fills in. A **wrong** draft costs a denial, never a bypass: the
+    collection only ever *narrows* which named records can bind an id, and a
+    parameter with no draft binds nothing at all. ``id`` on its own gets
+    nothing, because it says which-thing without saying which *kind* of thing.
+    """
+    lowered = name.lower()
+    for suffix in ("_ids", "_id"):
+        if lowered.endswith(suffix) and len(lowered) > len(suffix):
+            noun = lowered[: -len(suffix)].rsplit("_", 1)[-1]
+            if not noun:
+                return ""
+            plural = noun if noun.endswith("s") else f"{noun}s"
+            return f"**.{plural}"
+    return ""
 
 
 def _looks_like_amount(name: str) -> bool:

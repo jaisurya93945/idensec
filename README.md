@@ -23,13 +23,14 @@ No model in the decision path. No network calls. No runtime dependencies. The
 same trace always produces the same verdict.
 
 > **Status: 0.1, early and unreviewed.** Measured against AgentDojo with no
-> model in the loop, the result is a **trade-off curve, not a number**: 95.4%
-> security at 34.0% utility with no authority granted, 85.1% at 76.3% with
-> directories granted. **No configuration reaches 90% security and 70% utility
-> together.** The project's own falsification criterion asked for both and did
-> not get them — [`docs/REVIEW.md`](docs/REVIEW.md) says so in its own title.
-> Read that and [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) before anything
-> else here.
+> model in the loop, the result is a **trade-off surface, not a number**: from
+> 96.6% security at 43.3% utility to 85.1% at 77.3%, depending on how much
+> authority a deployment grants and where it sets two policy thresholds.
+> **No configuration reaches 90% security and 70% utility together** — the best
+> is 91.6%/68.0%. The project's own falsification criterion asked for both and
+> did not get them, and [`docs/REVIEW.md`](docs/REVIEW.md) says so in its own
+> title. Read that and [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) before
+> anything else here.
 
 ---
 
@@ -238,27 +239,43 @@ involved. Security assumes the model is *always* hijacked, which is harsher than
 AgentDojo's own metric; utility replays the calls a *correct* agent would make
 and is a lower bound.
 
-| authority granted to the workspace | security | utility |
-| --- | ---: | ---: |
-| nothing | **95.4%** | 34.0% |
-| every kind, everywhere | 55.8% | 46.4% |
-| per field path | 85.7% | 68.0% |
-| per field path + budgets for magnitudes | 85.1% | **76.3%** |
+There is no single number. Two policy thresholds move the result and neither has
+a defensible universal value, so the honest output is the **Pareto frontier**
+over every configuration measured:
 
-Every one of the escapes is traced to a cause, and all fall into limitations
-documented *before* the measurement existed. The boundary it draws:
+| security | utility | configuration |
+| ---: | ---: | --- |
+| **96.6%** | 43.3% | field-path grants, high quotation floor |
+| 95.7% | 52.6% | + reference binding |
+| 92.3% | 57.7% | field-path grants, medium floor |
+| **91.6%** | **68.0%** | + reference binding and spend budgets |
+| 85.7% | 69.1% | field-path grants, no floor |
+| 85.1% | **77.3%** | + spend budgets |
 
-> IDENSEC contains attacks that **introduce a new destination**. It does not
-> contain attacks that merely **select among legitimate ones**, nor attacks
-> whose target call has **no authority-bearing argument** at all.
+The full 6×5 sweep, the rows that do not flatter the design, and the nine defects
+the measurement found are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+
+Every escape is traced to a cause, and all fall into limitations documented
+*before* the measurement existed. The boundary it draws:
+
+> IDENSEC contains attacks that **introduce a new destination**, and attacks
+> that select a record the principal **never named**. It does not contain
+> attacks that select among legitimate records by **property** — "the cheapest",
+> "the oldest" — nor attacks whose target call has **no authority-bearing
+> argument** at all.
 
 **The exchange rate is the finding.** Granting a workspace authority over its own
-entity directories is worth 35 points of utility, because most agent work is
-selecting an existing entity — reschedule *that* event, share *that* file. It
-costs security for the same reason: an injection reading *"delete file 13"* names
-a file that really is in the directory. **Oracle provenance would not help** —
-knowing where a value came from does not tell you whether the principal meant
-it.
+entity directories is worth an enormous amount of utility, because most agent
+work is selecting an existing entity — reschedule *that* event, share *that*
+file. It costs security for the same reason: an injection reading *"delete file
+13"* names a file that really is in the directory. **Oracle provenance would not
+help** — knowing where a value came from does not tell you whether the principal
+meant it.
+
+*Reference binding* narrows that: an id is usable when the principal's own words
+name the record it identifies. On the suite that exercises entity selection it
+admits three more legitimate selections at zero security cost; across the whole
+benchmark it is worth two tasks out of ninety-seven.
 
 **Latency** — `admit()` is sub-millisecond at typical session length:
 

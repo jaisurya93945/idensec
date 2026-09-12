@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -98,6 +98,7 @@ class ProxyConfig:
             trust=_TRUST[trust_name],
             sensitivity=_SENSITIVITY[sensitivity_name],
             authoritative_for=frozenset(raw_source.get("authoritative_for", ())),
+            authoritative_paths=cls._paths(raw_source.get("authoritative_paths", {})),
             description=str(raw_source.get("description", "")),
         )
 
@@ -116,7 +117,7 @@ class ProxyConfig:
 
         return cls(
             source=source,
-            policy=POLICY_PRESETS[policy_name],
+            policy=cls._tune(POLICY_PRESETS[policy_name], data),
             policy_name=policy_name,
             contracts=contracts,
             task_file=cls._optional(base, data.get("task_file")),
@@ -137,6 +138,61 @@ class ProxyConfig:
         except ValueError as exc:
             raise ConfigError(f"config is not valid JSON: {exc}") from exc
         return cls.from_dict(data, base=config_path.parent)
+
+    @staticmethod
+    def _paths(raw: Any) -> tuple[tuple[str, frozenset[str]], ...]:
+        """Per-field-path authority grants.
+
+        A per-source grant cannot separate a workspace's own contact records
+        from the bodies of the messages other people wrote, because both arrive
+        from one source. That is why this exists, and why a deployment setting
+        only ``authoritative_for`` is choosing between refusing everything and
+        trusting message bodies. See docs/BENCHMARKS.md.
+        """
+        if not raw:
+            return ()
+        if not isinstance(raw, Mapping):
+            raise ConfigError(
+                "source.authoritative_paths must map a field-path glob to a list "
+                'of operand kinds, e.g. {"**.sender": ["email"]}'
+            )
+        grants: list[tuple[str, frozenset[str]]] = []
+        for prefix, kinds in raw.items():
+            if isinstance(kinds, str) or not isinstance(kinds, (list, tuple, set)):
+                raise ConfigError(
+                    f"source.authoritative_paths[{prefix!r}] must be a list of "
+                    "operand kind names"
+                )
+            grants.append((str(prefix), frozenset(str(k) for k in kinds)))
+        return tuple(grants)
+
+    @staticmethod
+    def _tune(policy: Policy, data: Mapping[str, Any]) -> Policy:
+        """Apply the two numeric knobs a preset cannot carry.
+
+        Both trade security against utility and neither has a defensible
+        universal value, so they are configuration rather than a preset. They
+        also interact: reference binding is meaningless below a quotation floor,
+        because a short id is "quoted" by any instruction containing that token.
+        docs/BENCHMARKS.md sweeps them together.
+        """
+        def _positive(key: str, fallback: int) -> int:
+            if key not in data:
+                return fallback
+            value = data[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ConfigError(f"{key} must be a positive integer")
+            return value
+
+        return replace(
+            policy,
+            min_quotation_length=_positive(
+                "min_quotation_length", policy.min_quotation_length
+            ),
+            min_reference_word=_positive(
+                "min_reference_word", policy.min_reference_word
+            ),
+        )
 
     @staticmethod
     def _budgets(raw: Any) -> tuple[Budget, ...]:

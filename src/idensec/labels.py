@@ -25,6 +25,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum
 
+from .kinds import REFERENCED
+
 __all__ = [
     "Attribution",
     "AttributionState",
@@ -32,6 +34,7 @@ __all__ = [
     "Sensitivity",
     "Source",
     "Trust",
+    "path_covers",
 ]
 
 
@@ -117,7 +120,7 @@ def _glob_segments(pattern: list[str], path: list[str]) -> bool:
     return _glob_segments(rest, path[1:])
 
 
-def _path_covers(pattern: str, path: str) -> bool:
+def path_covers(pattern: str, path: str) -> bool:
     """True when a grant pattern applies to a value observed at ``path``.
 
     Without wildcards the pattern is a prefix, and continuation must fall on a
@@ -231,7 +234,7 @@ class Source:
         if self.is_principal or kind in self.authoritative_for:
             return True
         return any(
-            kind in kinds and _path_covers(prefix, path)
+            kind in kinds and path_covers(prefix, path)
             for prefix, kinds in self.authoritative_paths
         )
 
@@ -275,7 +278,17 @@ class Attribution:
     origins: tuple[Origin, ...] = ()
     derivation: str = ""
     """How the value was traced: ``seal``, ``operand``, ``trusted-substring``,
-    ``untrusted-substring``. Recorded for audit, never used for permission."""
+    ``untrusted-substring``, ``reference-bound``. Recorded for audit; only
+    ``reference-bound`` also affects permission, and only where a source grants
+    :data:`~idensec.kinds.REFERENCED`."""
+
+    reference_bound: bool = False
+    """The value identifies an entity the principal quoted a field of.
+
+    Set independently of ``derivation`` because it is a fact about the *entity*,
+    not about how the id itself was traced -- the id still came from the
+    directory, and the audit record should keep saying so.
+    """
 
     @property
     def sensitivity(self) -> Sensitivity:
@@ -298,7 +311,13 @@ class Attribution:
             return False
         for origin in self.origins:
             source = sources.get(origin.source_id)
-            if source is not None and source.is_authoritative_for(kind, origin.path):
+            if source is None:
+                continue
+            if source.is_authoritative_for(kind, origin.path):
+                return True
+            if self.reference_bound and source.is_authoritative_for(
+                REFERENCED, origin.path
+            ):
                 return True
         return False
 

@@ -31,14 +31,23 @@ still fail for unrelated reasons.
 ```bash
 git clone --depth 1 https://github.com/ethz-spylab/agentdojo.git /tmp/agentdojo
 python3 -m pip install --target /tmp/adenv \
-    "pydantic[email]>=2" pyyaml python-dateutil deepdiff docstring-parser
+    "pydantic[email]>=2" pyyaml python-dateutil deepdiff docstring-parser requests
 
 python3 benchmarks/agentdojo/run_eval.py \
     --agentdojo /tmp/agentdojo/src \
     --deps /tmp/adenv \
     --loader benchmarks/agentdojo \
-    [--suite workspace] [--limit 20] [--min-quotation 4] [--json out.json]
+    [--suite workspace] [--limit 20] [--min-quotation 3] [--json out.json]
+
+# the surface in docs/BENCHMARKS.md, one floor per run
+for q in 1 2 3 4 6 8; do
+    python3 benchmarks/agentdojo/run_eval.py ... --min-quotation "$q"
+done
 ```
+
+`requests` is imported by AgentDojo's own agent pipeline at import time, even
+though no pipeline is constructed here. It is a dependency of loading the
+suites, not of the evaluation.
 
 `load_agentdojo.py` fabricates the model-provider SDKs on demand rather than
 installing them. That keeps a large dependency tree out of the way and makes it
@@ -52,19 +61,19 @@ Three artefacts are ours, not AgentDojo's, and every result inherits that:
    schema; that is the one inference `derive_contract()` refuses to make, so a
    human declares them, which is what an operator would do. Where a name was
    ambiguous the more dangerous reading was taken.
-2. **`SCOPED_GRANTS`** in `run_eval.py` — which *field paths* of the
-   environment are authoritative for which operand kinds. Derived by inspecting
-   where AgentDojo actually stores addresses and where it actually plants
-   injections.
-3. **Parameter roles** — drafted automatically by `derive_contract()` from each
-   tool's own JSON Schema, unmodified.
+2. **`SCOPED_GRANTS`** and **`ENTITY_COLLECTIONS`** in `run_eval.py` — which
+   *field paths* of the environment are authoritative for which operand kinds,
+   and which paths are entity directories. Derived by inspecting where AgentDojo
+   actually stores addresses and where it actually plants injections.
+3. **Parameter roles and collections** — drafted automatically by
+   `derive_contract()` from each tool's own JSON Schema, unmodified.
 
 Only (3) is automatic. (1) and (2) are per-API work, which is the honest cost of
 the approach and is reported as such.
 
 ## Labellings
 
-The point of the design is that **source authority is the knob**, so three
+The point of the design is that **source authority is the knob**, so five
 settings are measured side by side:
 
 | labelling | the workspace is authoritative for… |
@@ -72,10 +81,31 @@ settings are measured side by side:
 | `strict` | nothing |
 | `permissive` | every operand kind, everywhere |
 | `scoped` | specific kinds under specific field paths |
+| `recommended` | `scoped`, with computed magnitudes as content and a spend budget |
+| `referenced` | `recommended`, but entity directories authorise only records the principal named |
 
-`scoped` exists because the first two are both wrong, and measuring them is what
-showed it: a per-source grant cannot separate a workspace's own contact records
-from the bodies of messages other people wrote, and both arrive from one source.
+Each exists because the one before it was measured and found to fail in a
+specific, nameable way. `scoped` because a per-source grant cannot separate a
+workspace's own contact records from the bodies of messages other people wrote,
+and both arrive from one source. `recommended` because *computed* amounts are
+unattributable by construction and a budget, not provenance, is the control for
+them. `referenced` because entity selection is most of real agent work and a
+blanket directory grant admits every injection that names a real entry.
+
+## Sweeping the knobs
+
+Two policy settings interact and neither is meaningful alone, so both are swept
+rather than fixed:
+
+```bash
+--min-quotation N        # characters before quoting a value counts as evidence
+--min-reference-word N   # characters before a lone word counts as naming a record
+--labelling NAME         # repeatable; restrict to particular labellings
+```
+
+There is no single security number and no single utility number — only a curve
+per labelling. [`../../docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md) reports
+the whole sweep, including the rows that do not flatter the design.
 
 ## Reading the output
 

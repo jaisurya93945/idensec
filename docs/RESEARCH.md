@@ -486,7 +486,9 @@ while building features would be the dishonest outcome.
 `RESULT` (**second pass, after fixing what the first pass exposed**) — The
 measurement is a curve, not a number: 95.4% security at 34.0% utility with no
 authority granted, 85.1%/76.3% with directories granted and magnitudes budgeted.
-**No configuration reaches 90% security and 70% utility together.**
+**No configuration reaches 90% security and 70% utility together.** (Those
+figures are this pass's; Thread 3f re-measures the same labellings with both
+policy knobs swept and supersedes them.)
 
 `INFERENCE` — **The binding constraint is entity selection, and it is not
 something determinism can fix.** Every bug fixed in this pass bought utility at
@@ -512,6 +514,81 @@ it in those words.
 `FACT` — Effect classes and scoped grants were hand-authored per API by people
 who do not own those APIs. That is the policy-sprawl objection this project
 claims to answer, and one afternoon for four APIs does not answer it.
+
+---
+
+## Thread 3f — Reference binding, and what measuring it cost (2026-09-12)
+
+`EXPERIMENT` — Thread 3e identified *entity selection* as the binding constraint
+and named one candidate answer: bind the id the agent passes back to the
+principal's own **reference** to the record. Built as a pseudo-kind
+(`referenced`) granted per field path, and measured on the same AgentDojo
+harness. ADR-0011 records the decision; the numbers are in
+[`BENCHMARKS.md`](BENCHMARKS.md).
+
+`RESULT` — **Three defects in the mechanism, all found by measuring it and none
+by review.** They are recorded first because the version of this entry that
+skipped them would have reported a real number for a mechanism that did not
+work.
+
+1. **Whole-field matching fires on nothing.** The first implementation required
+   the principal to quote a descriptive field in full. Against AgentDojo it
+   matched **zero** selections: people write "reschedule my Dental check-up"
+   about a record titled `Dentist Appointment` with the description `Regular
+   dental check-up.`. Naming is partial. The unit had to become a *fragment* —
+   a two-word phrase, or a lone word long enough to be distinctive.
+2. **An id means nothing outside its collection.** AgentDojo's calendar, inbox
+   and drive all number their records from 1. Binding the key `13` outright let
+   an instruction naming *calendar event 13* authorise `delete_file(13)` — the
+   attack the mechanism exists to refuse, reproduced *by* the mechanism. Fixed
+   by requiring the receiving parameter to declare which directory its id
+   addresses, and by firing for no parameter that does not.
+3. **The evaluation was rigged, unintentionally.** The `referenced` labelling
+   pinned its own quotation floor while the sweep varied everyone else's, which
+   made its column invariant **by construction** and would have been reported as
+   a finding. The floor now applies uniformly to all five labellings.
+
+`RESULT` — Two further defects surfaced alongside: reference binding was
+computed even for labellings that granted nothing through it, silently inflating
+their utility; and advisory parameter hints matched names exactly, so
+`new_start_time` was treated as authority-bearing while `start_time` was not.
+
+`RESULT` — **The mechanism works, and it is not the win the roadmap hoped for.**
+On the workspace suite -- the one that actually exercises entity selection -- it
+admits three previously-refused selections at **zero** security cost: 70.0% →
+77.5% utility, 100% security either way. In aggregate across four suites it is
+worth **two tasks out of ninety-seven**: the best configuration above 90%
+security moves from 91.6%/66.0% to 91.6%/68.0%. It does **not** clear the
+90%/70% bar this project set itself, and the permissive configurations still buy
+more utility for less security.
+
+`RESULT` — **It also loses a task, and the loss is instructive.** A blanket grant
+over a file directory authorises not only the file *ids* but the contents of
+every file, which is how the previous configuration passed a banking task that
+reads an address out of a document. AgentDojo never charges for that grant
+because its banking injections target transfers rather than profile fields, so
+the benchmark scores the unsafe configuration higher. The charge is asserted as
+a test (`TestWhatTheBlanketGrantCostsElsewhere`) rather than argued in prose.
+
+`INFERENCE` — What reference binding changes is less the point than the *shape*:
+its utility barely moves across quotation floors 1 through 4 (68.0% at all of
+them), because the reference check does not depend on the id being long enough
+to quote. Every other labelling trades security against utility along that
+floor — `recommended` swings 77.3% → 66.0% over the same range. An operator
+tuning the floor is otherwise choosing a security/utility point with a character
+count, which is a poor interface. That is a usability property, not a security
+one, and it is worth about as much as it sounds.
+
+`FACT` — The residue of entity selection is selection by **property**: "the
+cheapest hotel", "the oldest file", "the most recent thread". The principal
+names nothing, so there is nothing to bind. No candidate mechanism is proposed,
+because we do not have one, and inventing one here to make the section end well
+would be exactly the failure mode this ledger exists to prevent.
+
+`FACT` — `ParameterContract.collection` is a new per-API declaration. It is
+drafted from `<noun>_id` parameter names, and a wrong draft costs a denial
+rather than a bypass, but it is one more thing an operator writes down. The
+policy-sprawl objection in Thread 3e applies to it unchanged.
 
 ---
 

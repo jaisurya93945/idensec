@@ -488,3 +488,111 @@ Option 2. Trusted sources are *indexed*, untrusted sources are *sealed*.
 - Tool *descriptions* sit at the bottom of the integrity lattice, below
   untrusted tool output, because MCP tool poisoning makes them attacker-
   controllable while they look like configuration.
+
+---
+
+## ADR-0011 — Reference binding: an id is usable when the principal named the record
+
+**Status:** accepted · 2026-09-12
+
+### Problem
+
+The AgentDojo evaluation identified entity selection as the binding constraint,
+not as an implementation gap but as a property of provenance: *reschedule that
+event*, *share that file*, *reply to that thread* is most of real agent work, and
+the id the agent must pass back comes from the directory either way. Provenance
+answers **where the value came from**, which is the same answer whether the
+principal chose the record or an injection did.
+
+The two settings measured before this ADR are both wrong:
+
+- Grant the directory blanket authority, and an injection reading *"delete file
+  13"* is admitted, because file 13 really is in the directory.
+- Grant it nothing, and the legitimate selection is refused along with the
+  attack.
+
+### Alternatives considered
+
+1. **Accept the limitation.** Narrow the claim to introduced destinations, which
+   is what [`REVIEW.md`](REVIEW.md) had already done, and stop.
+2. **Trust the directory but bound the damage** with effect classes and budgets —
+   allow the selection, cap how many entities a session may touch.
+3. **Bind the id to the principal's own reference.** The instruction names the
+   record — by title, by filename, by location — and the directory says which id
+   that description belongs to. Admit the id when those two agree.
+
+### Evidence
+
+Option 2 is already available and does not address the case: deleting *one*
+attacker-chosen file is within any budget a real workflow would set.
+
+Option 3 needs a signal provenance does not carry, and the question is whether
+that signal is honest or a euphemism for guessing. It is checkable
+deterministically: the principal's text either contains a fragment of the
+record's descriptive fields or it does not. Crucially the check is run against
+**trusted sources only**, so an injection cannot supply the quotation that would
+bind its own target.
+
+Measured on AgentDojo it does what it was designed to do on the suite that
+exercises entity selection, and **less than hoped in aggregate**. On the
+workspace suite it admits three previously-refused selections at **zero**
+security cost (utility 70.0% → 77.5%, security 100% either way). Across all four
+suites, with both policy knobs swept rather than fixed, the best configuration
+above 90% security moves from **91.6%/66.0%** to **91.6%/68.0%** — two tasks out
+of ninety-seven. The full sweep, including the rows where it loses, is in
+[`BENCHMARKS.md`](BENCHMARKS.md).
+
+It does not clear the project's own 90%/70% bar, and reporting the workspace row
+without the aggregate would be the flattering version of this section.
+
+Two defects in the mechanism were found by measuring it rather than by review,
+and both are recorded here because the first version of this ADR would have
+claimed a result neither of them supports:
+
+- **Whole-field matching fires almost never.** Requiring the principal to quote
+  a descriptive field in full matched *zero* AgentDojo selections: instructions
+  say "reschedule my Dental check-up" about a record titled `Dentist
+  Appointment`. Naming is partial, so the unit of comparison is a fragment — a
+  two-word phrase, or a single word long enough to be distinctive.
+- **An id means nothing outside its collection.** AgentDojo's events, emails and
+  files all number from 1. Binding the key `13` outright let an instruction
+  naming *calendar event 13* authorise deleting *file 13* — the exact attack the
+  mechanism exists to refuse. Reference binding therefore requires the
+  parameter to declare which directory its id addresses, and fires for no
+  parameter that does not.
+
+### Decision
+
+Option 3, as a **pseudo-kind** (`referenced`) that a source is granted authority
+over per field path, exactly like any other kind. A value is admitted through it
+when all of:
+
+1. the value is a key of a record in a collection the grant covers;
+2. the parameter receiving it declares that collection
+   (`ParameterContract.collection`);
+3. some trusted source quotes a fragment of that record's short descriptive
+   fields — a two-word phrase, or a lone word of at least
+   `Policy.min_reference_word` characters.
+
+Long fields are excluded from (3) deliberately: a record's *body* is where
+injections live, and quoting one must never bind a reference.
+
+### Consequences
+
+- **It is not a general answer to entity selection, and must not be described as
+  one.** "Book the cheapest hotel" quotes nothing about any hotel. Selection by
+  *property* — cheapest, oldest, most recent — remains refused, and is now the
+  residue of U01 rather than the whole of it.
+- **A new per-API declaration.** `collection` joins effect classes and field-path
+  grants as something an operator writes down. `derive_contract` drafts it from
+  `<noun>_id` parameter names; a wrong draft costs a denial, never a bypass,
+  because the collection only narrows which records can bind.
+- **A confusion attack exists.** An attacker who can create a record *and* guess
+  the principal's phrasing can have their record be the one named. This is
+  weaker than the attack it replaces — it needs write access and a correct guess
+  rather than only injected text — and it is recorded in
+  [`LIMITATIONS.md`](LIMITATIONS.md) rather than treated as closed.
+- **Two knobs now interact.** Reference binding only matters above a quotation
+  floor, because below one a short id is "quoted" by any instruction containing
+  that token and the reference check never runs. Both are swept together in
+  [`BENCHMARKS.md`](BENCHMARKS.md); neither is reported alone.

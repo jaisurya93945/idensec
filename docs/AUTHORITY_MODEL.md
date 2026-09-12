@@ -88,6 +88,7 @@ permitted derivations are exactly:
 | `operand` | `normalise(x)` equals a recorded operand of the same kind. |
 | `trusted-substring` | `x` is a whole-token quotation of text from a principal source. |
 | `untrusted-substring` | `x` is a whole-token quotation of text from a non-principal source. |
+| `reference-bound` | `x` is the id of a record a principal source *named*. See §4b. |
 
 **Whole-token** is load-bearing. Plain substring matching allows a value to be
 carved out of the middle of a longer trusted token: with the instruction
@@ -95,6 +96,48 @@ carved out of the middle of a longer trusted token: with the instruction
 would inherit the principal's authority. Matches must be delimited on both sides
 by characters outside the identifier alphabet. This was a real bypass, found by
 attacking the implementation; the regression test is in `tests/test_ledger.py`.
+
+---
+
+## 4b. Reference binding
+
+Attribution as described above cannot distinguish *the principal selected this
+record* from *an injection selected this record*: both produce an id whose
+origin is the directory. Reference binding is a separate, narrow derivation that
+answers the question attribution cannot, and it is opt-in per source and per
+field path like any other authority grant.
+
+Write `named(S, r)` for "some trusted source quotes a fragment of record `r`'s
+short descriptive fields". For a value `x` filling parameter `p`:
+
+```
+reference_bound(x, p)  ⟺  ∃ r . key(r) = x
+                        ∧ collection(r) ⊑ collection(p)
+                        ∧ named(S_trusted, r)
+```
+
+and the admission rule of §5 accepts `x` when the record's source is
+authoritative for the pseudo-kind `referenced` at that path, whatever `x`'s own
+kind is — an id has no surface grammar to classify.
+
+Three parts of this are load-bearing, and each was established by an attack that
+worked without it:
+
+| Part | Why |
+| --- | --- |
+| `S_trusted` only | If untrusted text could supply the quotation, an injection would quote the title of the record it wants deleted and bind it itself. |
+| `collection(r) ⊑ collection(p)` | Ids are unique inside a directory and meaningless outside one. Without this, naming *calendar event 13* authorised deleting *file 13*. |
+| **short** fields only | A record's body is where injections live. Quoting one must never bind a reference. |
+
+A *fragment* is a two-word phrase, or a lone word of at least
+`Policy.min_reference_word` characters. Whole-field matching was the first
+implementation and fired on nothing: people write "my Dental check-up", not
+"Dentist Appointment". A lone-word floor is what keeps `meeting` — which names
+half the calendar — from naming anything.
+
+**What it does not do.** It converts selections the principal *named*. Selection
+by property — "the cheapest hotel", "the oldest file" — quotes nothing about any
+record and is still refused. See [`LIMITATIONS.md`](LIMITATIONS.md).
 
 ---
 

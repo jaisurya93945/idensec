@@ -27,6 +27,7 @@ from idensec.contracts import (
     Role,
     ToolContract,
 )
+from idensec.kinds import REFERENCED
 from idensec.labels import Source, Trust
 from idensec.lint import Severity, lint_contract, lint_registry, lint_sources, render
 
@@ -327,3 +328,50 @@ class TestCLI:
     def test_unreadable_file_exits_two(self, tmp_path: Path) -> None:
         result = self._run(str(tmp_path / "nope.json"))
         assert result.returncode == 2
+
+
+class TestInertReferenceGrant:
+    """A grant that can never fire is worse than no grant: it *removes* the
+    authority the path would otherwise have carried, silently."""
+
+    def _sources(self):
+        return [
+            Source("principal", Trust.USER_INPUT),
+            Source(
+                "ws",
+                Trust.TOOL_UNTRUSTED,
+                authoritative_paths={"**.files": frozenset({REFERENCED})},
+            ),
+        ]
+
+    def test_flagged_when_no_parameter_declares_the_collection(self) -> None:
+        registry = ContractRegistry(
+            [
+                ToolContract(
+                    tool="delete_file",
+                    parameters={
+                        "file_id": ParameterContract("file_id", Role.AUTHORITY)
+                    },
+                    effects=frozenset({Effect.DELETE}),
+                )
+            ]
+        )
+        codes = {d.code for d in lint_registry(registry, self._sources())}
+        assert "inert-reference-grant" in codes
+
+    def test_silent_when_a_parameter_declares_it(self) -> None:
+        registry = ContractRegistry(
+            [
+                ToolContract(
+                    tool="delete_file",
+                    parameters={
+                        "file_id": ParameterContract(
+                            "file_id", Role.AUTHORITY, collection="**.files"
+                        )
+                    },
+                    effects=frozenset({Effect.DELETE}),
+                )
+            ]
+        )
+        codes = {d.code for d in lint_registry(registry, self._sources())}
+        assert "inert-reference-grant" not in codes

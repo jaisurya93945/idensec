@@ -17,13 +17,14 @@ a decision auditable rather than merely logged.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 from .audit import AuditChain, AuditRecord
 from .budget import Budget, BudgetLedger
 from .contracts import ContractRegistry, Effect, ParameterContract, Role, ToolContract
 from .decision import Decision, Finding, FindingCode, Verdict
-from .kinds import DEFAULT_KINDS, UNCLASSIFIED, classify, extract
+from .kinds import DEFAULT_KINDS, REFERENCED, UNCLASSIFIED, classify, extract
 from .labels import (
     Attribution,
     AttributionState,
@@ -37,6 +38,24 @@ from .ledger import OperandLedger, Resolution
 from .policy import STRICT, Disposition, Policy
 
 __all__ = ["Session", "SessionHalted"]
+
+
+def _describing_text(record: Mapping[str, Any], limit: int = 24) -> list[str]:
+    """The short string fields of a record: what a person would call it by.
+
+    Long text is skipped deliberately. A record's *body* or *description* is
+    where injections live, so quoting one must not bind a reference -- only the
+    short, name-like fields count.
+    """
+    found: list[str] = []
+    for value in record.values():
+        if isinstance(value, str) and 0 < len(value) <= 120:
+            found.append(value)
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            found.append(str(value))
+        if len(found) >= limit:
+            break
+    return found
 
 
 class SessionHalted(RuntimeError):
@@ -104,6 +123,7 @@ class Session:
         self._denials = 0
         self._halted = False
         self._confidential_context = False
+        self._references_declared: bool | None = None
         for source in sources:
             self.declare_source(source)
 
@@ -126,6 +146,7 @@ class Session:
                 "provenance"
             )
         self._sources[source.id] = source
+        self._references_declared = None
         return source
 
     @property
@@ -146,6 +167,26 @@ class Session:
         if source is None:
             return int(Trust.TOOL_UNTRUSTED), int(Sensitivity.PUBLIC)
         return int(source.trust), int(source.sensitivity)
+
+    @property
+    def _reference_binding_declared(self) -> bool:
+        """True when some source is authoritative over ``REFERENCED``.
+
+        Reference binding is opt-in per source, and asking whether a value is
+        an id of a record the principal named is the most expensive question
+        the monitor can ask. Skipping it entirely when no grant could act on
+        the answer keeps that cost off every deployment that has not asked
+        for it. Cached because it is consulted per attributed leaf, and
+        invalidated by :meth:`declare_source`, which is the only thing that can
+        change the answer.
+        """
+        if self._references_declared is None:
+            self._references_declared = any(
+                REFERENCED in source.authoritative_for
+                or any(REFERENCED in kinds for _, kinds in source.authoritative_paths)
+                for source in self._sources.values()
+            )
+        return self._references_declared
 
     @property
     def _trusted_source_ids(self) -> tuple[str, ...]:
@@ -214,9 +255,20 @@ class Session:
             # sealed: rewriting a key would change the structure the agent has
             # to navigate, and attribution, not sealing, is what refuses an
             # attacker-chosen value at the write boundary.
-            for key in content:
-                if isinstance(key, str) and key:
-                    self.ledger.index(source, key, step=step, path=path)
+            for key, value in content.items():
+                if not isinstance(key, str) or not key:
+                    continue
+                self.ledger.index(source, key, step=step, path=path)
+                if isinstance(value, Mapping):
+                    # A dict under a dict is a directory record. Remember what
+                    # describes it, so that selecting it can later be checked
+                    # against whether the principal referred to it.
+                    self.ledger.record_entity(
+                        key,
+                        path,
+                        _describing_text(value),
+                        Origin(source.id, source.trust, source.sensitivity, step, path),
+                    )
             return {
                 key: self._walk_observe(
                     source, value, step, f"{path}.{key}" if path else str(key)
@@ -419,7 +471,9 @@ class Session:
                     derivation="seal",
                 )
             else:
-                attribution = self._attribute_literal(match.value, match.kind)
+                attribution = self._attribute_literal(
+                    match.value, match.kind, parameter.collection
+                )
             attributions.append(attribution)
 
             if parameter.kinds and match.kind not in parameter.kinds:
@@ -462,7 +516,7 @@ class Session:
         # whole value has to stand up on its own. This is the fail-closed path,
         # and declaring UNCLASSIFIED opts into it rather than out of anything.
 
-        whole = self._attribute_whole(text, resolution)
+        whole = self._attribute_whole(text, resolution, parameter.collection)
         attributions.append(whole)
         kind = classify(text, self._kinds) or UNCLASSIFIED
         findings.extend(self._authority_findings(label, parameter, kind, whole, text))
@@ -506,18 +560,47 @@ class Session:
 
     # -- attribution -----------------------------------------------------
 
-    def _attribute_literal(self, value: str, kind: str) -> Attribution:
+    def _attribute_literal(
+        self, value: str, kind: str, collection: str = ""
+    ) -> Attribution:
         """Attribute a value the model typed rather than referenced."""
         operand = self.ledger.lookup(kind, value)
         if operand is not None:
-            return Attribution(
-                state=AttributionState.ATTRIBUTED,
-                origins=operand.origins,
-                derivation="operand",
+            return self._bind_reference(
+                value,
+                Attribution(
+                    state=AttributionState.ATTRIBUTED,
+                    origins=operand.origins,
+                    derivation="operand",
+                ),
+                collection,
             )
-        return self._attribute_by_derivation(value)
+        return self._attribute_by_derivation(value, collection)
 
-    def _attribute_whole(self, text: str, resolution: Resolution) -> Attribution:
+    def _bind_reference(
+        self, value: str, attribution: Attribution, collection: str
+    ) -> Attribution:
+        """Mark an attribution whose value identifies an entity the principal named.
+
+        This is the only signal in the system that distinguishes *the principal
+        selected this record* from *an injection selected this record*. The ids
+        are identical and so is their provenance; what differs is whether the
+        principal's own instruction quotes something about the record.
+        """
+        if attribution.reference_bound or not self._reference_binding_declared:
+            return attribution
+        if not self.ledger.is_referenced(
+            value,
+            self._trusted_source_ids,
+            self.policy.min_reference_word,
+            collection,
+        ):
+            return attribution
+        return replace(attribution, reference_bound=True)
+
+    def _attribute_whole(
+        self, text: str, resolution: Resolution, collection: str = ""
+    ) -> Attribution:
         span = resolution.covers(0, len(text))
         if span is not None:
             return Attribution(
@@ -527,14 +610,20 @@ class Session:
             )
         operand = self.ledger.find_value(text)
         if operand is not None:
-            return Attribution(
-                state=AttributionState.ATTRIBUTED,
-                origins=operand.origins,
-                derivation="operand",
+            return self._bind_reference(
+                text,
+                Attribution(
+                    state=AttributionState.ATTRIBUTED,
+                    origins=operand.origins,
+                    derivation="operand",
+                ),
+                collection,
             )
-        return self._attribute_by_derivation(text)
+        return self._attribute_by_derivation(text, collection)
 
-    def _attribute_by_derivation(self, value: str) -> Attribution:
+    def _attribute_by_derivation(
+        self, value: str, collection: str = ""
+    ) -> Attribution:
         """Fall back to text derivation, trusted sources first.
 
         Checking trusted sources first is not an optimisation. If the principal
@@ -557,12 +646,47 @@ class Session:
             )
         origins = self.ledger.all_derivations(value, self._untrusted_source_ids)
         if origins:
-            return Attribution(
-                state=AttributionState.ATTRIBUTED,
-                origins=origins,
-                derivation="untrusted-substring",
+            return self._bind_reference(
+                value,
+                Attribution(
+                    state=AttributionState.ATTRIBUTED,
+                    origins=origins,
+                    derivation="untrusted-substring",
+                ),
+                collection,
             )
-        return Attribution(state=AttributionState.UNATTRIBUTED, derivation="none")
+        return self._attribute_by_reference(value, collection)
+
+    def _attribute_by_reference(
+        self, value: str, collection: str = ""
+    ) -> Attribution:
+        """Last resort: the value is an id of a record the principal named.
+
+        Entity ids are frequently too short and too opaque to be quotations of
+        anything -- "5" is not evidence. What *is* evidence is that the
+        principal quoted the record's title, and this is the only path on which
+        that counts. It is also the only way an id short enough to be excluded
+        by ``min_quotation_length`` can still be used, which is what makes the
+        two settings compose instead of fighting.
+        """
+        entities = (
+            self.ledger.referenced_entities(
+                value,
+                self._trusted_source_ids,
+                self.policy.min_reference_word,
+                collection,
+            )
+            if self._reference_binding_declared
+            else ()
+        )
+        if not entities:
+            return Attribution(state=AttributionState.UNATTRIBUTED, derivation="none")
+        return Attribution(
+            state=AttributionState.ATTRIBUTED,
+            origins=merge_origins(entity.origin for entity in entities),
+            derivation="reference-bound",
+            reference_bound=True,
+        )
 
     def _payload_attributions(self, resolution: Resolution) -> list[Attribution]:
         """Payload leaves are not authority-checked, only sensitivity-tracked."""

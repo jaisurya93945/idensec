@@ -230,7 +230,21 @@ provenance cannot distinguish "the hotel the principal wanted" from "the hotel
 a review named". 8 where a low-entropy token in the principal's own prompt
 collides with the attacker's target: *"what are we doing on June 13"*
 authorises `delete_file(id="13")`. `Policy.min_quotation_length` addresses the
-second class at zero measured utility cost; nothing addresses the first.
+second class at zero measured utility cost.
+
+**Reference binding** (ADR-0011) addresses part of the first, and only part.
+When the principal *names* the record — "delete `bill-december.txt`",
+"reschedule my dental check-up" — their own words are checked against the
+record's descriptive fields, and an injection naming a different real record is
+refused. What survives is selection by **property**: *"book the cheapest
+hotel"*, *"delete the oldest file"* name nothing, so there is nothing to bind
+and the selection is allowed or refused on origin alone. Two residual attacks —
+an attacker who creates a record and guesses the principal's phrasing, and a
+principal whose instruction accidentally contains a phrase from an unintended
+record — are stated in [`LIMITATIONS.md`](LIMITATIONS.md) rather than counted
+as closed.
+*Test:* `tests/test_reference_binding.py`, whose last class asserts what it
+does **not** solve.
 
 
 

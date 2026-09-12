@@ -39,6 +39,9 @@ class TestSerialisation:
             parameters={
                 "to": ParameterContract("to", Role.AUTHORITY, frozenset({"email"})),
                 "body": ParameterContract("body", Role.PAYLOAD),
+                "thread_id": ParameterContract(
+                    "thread_id", Role.AUTHORITY, collection="**.threads"
+                ),
             },
             effects=frozenset({Effect.NETWORK_EGRESS, Effect.WRITE}),
         )

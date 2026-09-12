@@ -6,7 +6,100 @@ comfortable, it was written badly.
 
 ---
 
+## 2026-09-12 — the one identified answer, built, and worth two tasks
+
+The previous entry named entity selection as the binding constraint and gave
+three honest options: narrow the claim, attack entity selection directly, or
+stop. Option 1 was taken then. Option 2 was taken now.
+
+**Reference binding is built, measured, and modest.** An id is admissible when
+the principal's own words *name* the record it identifies. ADR-0011 has the
+design; the numbers are below and in [`BENCHMARKS.md`](BENCHMARKS.md).
+
+### What it is worth
+
+| | security | utility |
+| --- | ---: | ---: |
+| workspace suite — blanket directory grant | 100% | 70.0% |
+| workspace suite — reference binding | 100% | **77.5%** |
+| **all four suites**, best ≥90% before | 91.6% | 66.0% |
+| **all four suites**, best ≥90% after | 91.6% | **68.0%** |
+
+On the suite that actually exercises entity selection it does what it was
+designed to do: three more legitimate selections, no security cost. Across the
+benchmark it is **two tasks out of ninety-seven**. Both rows are here because
+reporting only the first would be the flattering version.
+
+**The criterion is still missed.** 90% security and 70% utility together was the
+bar. 91.6%/68.0% is the closest configuration that exists, two points short, and
+it is two points short after the one mechanism anybody had identified for the
+constraint that was blocking it.
+
+### What the measurement cost us, and what that says
+
+Three defects in reference binding were found by running it and none by review:
+
+1. **Whole-field matching fired on nothing.** Zero AgentDojo selections. People
+   write "my Dental check-up" about `Dentist Appointment`.
+2. **Ids were bound without their collection**, so naming a calendar event
+   authorised deleting an unrelated file — the mechanism reproducing the exact
+   attack it exists to refuse.
+3. **The evaluation was rigged**, unintentionally: the new labelling pinned its
+   own quotation floor while the sweep varied everyone else's, which would have
+   been reported as a finding about the mechanism rather than about the harness.
+
+Defect 3 is the one worth dwelling on. It was not a bug in the library; it was a
+bug in *how we were about to describe the library*, and only the habit of
+sweeping a parameter rather than fixing it caught it. Two further defects
+surfaced alongside: reference binding was silently inflating the utility of
+labellings that granted nothing through it, and advisory parameter hints matched
+names exactly, so `new_start_time` was authority-bearing while `start_time` was
+not.
+
+### Is the thesis disproven?
+
+**No, and it is not confirmed either, and the gap has stopped moving quickly.**
+The previous three milestones each bought double-digit utility. This one bought
+two tasks. That is the shape of a design approaching its structural limit rather
+than one with obvious fixes remaining, and it should be read that way.
+
+What remains on the security side is not tuning. It is *selection by property* —
+"the cheapest hotel", "the oldest file" — where the principal names nothing, so
+there is nothing to bind. We have no candidate mechanism, and inventing one to
+make this entry end well would be exactly the failure this file exists to
+prevent.
+
+### What should happen next
+
+1. **Publish the surface, not a number.** Done: the README, the benchmark
+   document and the roadmap now report a Pareto frontier over thirty measured
+   configurations, and say plainly which bar is missed.
+2. **Stop optimising this benchmark.** Four suites with grants we authored is not
+   a population. The next honest measurement is against traffic we did not
+   write, not another point on this one.
+3. **Revisit stopping.** The founding brief said failure is acceptable. The
+   evidence now says: sound for introduced destinations and for named records,
+   structurally blind to property-based selection, at a per-API configuration
+   cost nobody has agreed to pay. That is a real result and a narrow product.
+
+### The strongest criticism, updated again
+
+> *"You built the one thing you said would move the curve, it moved it by two
+> tasks, and you are still here."*
+
+Fair. The response is that this entry leads with the two tasks rather than the
+workspace row, that the roadmap now says `done` next to the mechanism and
+records the residue as having **no candidate**, and that "revisit stopping" is
+item 3 rather than a footnote. The criticism that would actually land — that we
+kept going anyway — is one only the next milestone can answer.
+
+---
+
 ## 2026-09-10 (final) — the criterion is met on utility and missed on security
+
+> Superseded by the 2026-09-12 entry, which re-measures the same labellings with
+> both policy thresholds swept rather than fixed. Kept unedited: this file is a
+> record of what was known when, not a summary of what is known now.
 
 The condition set two entries ago: *"if a focused pass on contracts and grants
 does not take utility materially past 70% while holding security above 90%, the

@@ -21,6 +21,9 @@ from pathlib import Path
 
 import pytest
 
+from idensec.mcp.config import ConfigError, ProxyConfig
+from idensec.policy import STRICT
+
 ROOT = Path(__file__).resolve().parent.parent
 SERVER = ROOT / "tests" / "fake_mcp_server.py"
 ATTACKER = "exfil@evil.example"
@@ -598,3 +601,76 @@ class TestAudit:
         records = [json.loads(line) for line in audit.read_text().splitlines()]
         assert len(records) >= 2
         assert records[1]["previous"] == records[0]["digest"]
+
+
+class TestConfigurableGrants:
+    """The configuration surface has to be able to express the configuration the
+    documentation recommends. For most of this project's life it could not: the
+    proxy read only ``authoritative_for``, so a deployment had to choose between
+    refusing everything and trusting the bodies of other people's messages --
+    exactly the dichotomy path-scoped grants exist to break.
+    """
+
+    def _config(self, **source_extra) -> dict:
+        return {
+            "schema": "idensec.proxy/v1",
+            "source": {
+                "id": "ws",
+                "trust": "tool_untrusted",
+                **source_extra,
+            },
+        }
+
+    def test_path_grants_reach_the_source(self, tmp_path: Path) -> None:
+        config = ProxyConfig.from_dict(
+            self._config(
+                authoritative_paths={
+                    "**.sender": ["email"],
+                    "**.events": ["referenced"],
+                }
+            ),
+            base=tmp_path,
+        )
+        assert config.source.is_authoritative_for("email", "inbox.emails[0].sender")
+        assert not config.source.is_authoritative_for("email", "inbox.emails[0].body")
+        assert config.source.is_authoritative_for("referenced", "calendar.events")
+
+    def test_policy_knobs_are_applied_to_the_preset(self, tmp_path: Path) -> None:
+        config = ProxyConfig.from_dict(
+            {**self._config(), "min_quotation_length": 3, "min_reference_word": 6},
+            base=tmp_path,
+        )
+        assert config.policy.min_quotation_length == 3
+        assert config.policy.min_reference_word == 6
+        assert config.policy_name == "strict"
+
+    def test_omitted_knobs_keep_the_preset(self, tmp_path: Path) -> None:
+        config = ProxyConfig.from_dict(self._config(), base=tmp_path)
+        assert config.policy == STRICT
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"min_quotation_length": 0},
+            {"min_quotation_length": "three"},
+            {"min_reference_word": -1},
+            {"min_reference_word": True},
+        ],
+    )
+    def test_a_nonsense_knob_refuses_to_start(self, data: dict, tmp_path: Path) -> None:
+        with pytest.raises(ConfigError, match="positive integer"):
+            ProxyConfig.from_dict({**self._config(), **data}, base=tmp_path)
+
+    @pytest.mark.parametrize(
+        "grants",
+        [{"**.sender": "email"}, ["**.sender"], {"**.sender": 3}],
+    )
+    def test_a_malformed_path_grant_refuses_to_start(
+        self, grants: object, tmp_path: Path
+    ) -> None:
+        """Fails closed, loudly. A grant the proxy silently dropped would look
+        like a working deployment and enforce nothing at that path."""
+        with pytest.raises(ConfigError, match="authoritative_paths"):
+            ProxyConfig.from_dict(
+                self._config(authoritative_paths=grants), base=tmp_path
+            )

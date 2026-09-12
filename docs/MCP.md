@@ -114,13 +114,21 @@ with.
   "schema": "idensec.proxy/v1",
   "server": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/srv/docs"],
   "source": {
-    "id": "filesystem",
+    "id": "workspace",
     "trust": "tool_untrusted",
     "sensitivity": "internal",
-    "authoritative_for": []
+    "authoritative_for": [],
+    "authoritative_paths": {
+      "**.sender": ["email"],
+      "**.participants[*]": ["email"],
+      "**.events": ["referenced"],
+      "**.files": ["referenced"]
+    }
   },
   "policy": "strict",
-  "contracts": "contracts/filesystem.json",
+  "min_quotation_length": 3,
+  "min_reference_word": 8,
+  "contracts": "contracts/workspace.json",
   "task_file": "/run/idensec/task.txt",
   "audit": "idensec-audit.jsonl"
 }
@@ -130,11 +138,22 @@ with.
 | --- | --- |
 | `server` | argv of the MCP server to launch. The proxy speaks MCP to your host on stdio and to this process on pipes. |
 | `source.trust` | **No default.** Labelling a source is the one decision IDENSEC cannot make for you, and the config refuses to load without it. |
-| `source.authoritative_for` | Operand kinds this server may supply as authority. A corporate directory gets `["email"]`; a web fetcher gets `[]`. |
+| `source.authoritative_for` | Operand kinds this server may supply as authority, *anywhere in its output*. A corporate directory gets `["email"]`; a web fetcher gets `[]`. |
+| `source.authoritative_paths` | The same, per **field path**. This is the setting that makes retrieve-then-act work: a workspace is authoritative about the `sender` of a message and not about its `body`, and both arrive from one source. A whole-source grant cannot express that, which is why deployments using only `authoritative_for` are choosing between refusing everything and trusting message bodies. |
 | `policy` | `strict` · `supervised` · `observe` |
+| `min_quotation_length` | Characters before quoting a value counts as evidence. Raising it closes low-entropy collisions (*"what are we doing on June 13"* authorising `delete_file(13)`) and refuses legitimate short values with them. |
+| `min_reference_word` | Characters before a lone quoted word counts as *naming* a record. Only matters where a path is granted `referenced`. |
 | `contracts` | Path to a contract file. Absent ⇒ every tool is unknown ⇒ denied. |
 | `task_file` | See above. Absent ⇒ no trusted corpus. |
 | `seal_tool_descriptions` | Defaults true. Turning it off opens the tool-poisoning path and is logged loudly at startup. |
+
+Both numeric knobs trade security against utility, neither has a defensible
+universal value, and they interact — reference binding is meaningless below a
+quotation floor, because a short id is "quoted" by any instruction containing
+that token. [`BENCHMARKS.md`](BENCHMARKS.md) sweeps them together rather than
+recommending one. Run `python -m idensec.lint` over your contracts and config:
+a `referenced` grant that no parameter declares a collection for is inert, and
+it denies everything that path would otherwise have allowed.
 
 Point your MCP host at the proxy instead of the server:
 

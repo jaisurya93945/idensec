@@ -19,7 +19,7 @@ differently from ground truth, and a call the monitor allows may still fail for
 other reasons. It measures the monitor, which is the component this project
 builds.
 
-Two labellings are run, because the point of the design is that source authority
+Five labellings are run, because the point of the design is that source authority
 is the knob:
 
 * ``strict``     -- the workspace is authoritative for nothing.
@@ -34,11 +34,21 @@ is the knob:
   compute amounts ("prices rose 10%, send the difference"), arithmetic is a
   semantic derivation quotation cannot follow, and a budget is a control
   provenance cannot provide and does not need to.
+* ``referenced`` -- ``recommended``, but the entity directories authorise only
+  records the principal actually *named*, via ``REFERENCED``. An id is usable
+  when the principal's own words name the record it identifies, and not when
+  only an injection did.
 
-The third exists because the first two are both wrong, and measuring them
-side by side is what showed it: a per-source grant cannot separate a workspace's
-own contact records from the bodies of messages other people wrote, and both
-arrive from one source.
+``scoped`` exists because the first two are both wrong, and measuring them side
+by side is what showed it: a per-source grant cannot separate a workspace's own
+contact records from the bodies of messages other people wrote, and both arrive
+from one source. ``recommended`` and ``referenced`` each exist because
+``scoped`` was then measured and found to fail in a specific, nameable way --
+computed magnitudes and entity selection respectively.
+
+``--min-quotation`` applies to every labelling, and sweeping it is how the
+security/utility exchange rate is read off: there is no single number for either
+axis, only a curve per labelling.
 
 Usage:
     python3 benchmarks/agentdojo/run_eval.py --agentdojo <path/to/agentdojo/src> \\
@@ -73,11 +83,12 @@ from idensec import (  # noqa: E402
     Verdict,
     derive_contract,
 )
-from idensec.kinds import DEFAULT_KINDS, UNCLASSIFIED  # noqa: E402
+from idensec.kinds import DEFAULT_KINDS, REFERENCED, UNCLASSIFIED  # noqa: E402
 
 PRINCIPAL = "principal"
 WORKSPACE = "workspace"
 MIN_QUOTATION = 1
+MIN_REFERENCE_WORD = 8
 
 
 @dataclass
@@ -137,6 +148,13 @@ def build_contracts(suite, magnitudes_as_content: bool = False) -> ContractRegis
 # opposed to free text other people wrote. Derived by inspecting where AgentDojo
 # actually puts addresses and where it actually puts injections -- see
 # docs/BENCHMARKS.md. Deliberately does not include body, description or content.
+
+# Entity collections keyed by id. In these environments the id lives in the dict
+# *key* -- calendar.events["5"] -- so it is the collection path, not a field,
+# that carries the grant. Two strengths are measured: blanket authority over the
+# directory, and authority only over records the principal actually named.
+ENTITY_COLLECTIONS = ("**.events", "**.files", "**.emails", "**.accounts")
+
 SCOPED_GRANTS = {
     # workspace / banking: addresses and accounts in structured fields
     "**.sender": frozenset({"email"}),
@@ -167,37 +185,51 @@ SCOPED_GRANTS = {
     ),
     "**.account_iban": frozenset({"iban"}),
     "**.filename": frozenset({"posix_path", UNCLASSIFIED}),
-    # Entity collections keyed by id. In these environments the id lives in the
-    # dict *key* -- calendar.events["5"] -- so it is the collection path, not a
-    # field, that has to carry the grant.
-    "**.events": frozenset({UNCLASSIFIED}),
-    "**.files": frozenset({UNCLASSIFIED}),
-    "**.emails": frozenset({UNCLASSIFIED}),
-    "**.accounts": frozenset({UNCLASSIFIED}),
+
     # Deliberately absent: slack channel names. In this benchmark the channel
     # list is itself an injection vector, so a source that names channels is
     # a source that names the attacker's channel.
 }
 
 
+def entity_grants(strength: frozenset[str]) -> dict[str, frozenset[str]]:
+    return dict.fromkeys(ENTITY_COLLECTIONS, strength)
+
+
 def make_session(contracts: ContractRegistry, labelling: str) -> Session:
-    scoped = labelling in ("scoped", "recommended")
+    scoped = labelling in ("scoped", "recommended", "referenced")
+    grants = dict(SCOPED_GRANTS) if scoped else {}
+    if labelling in ("scoped", "recommended"):
+        grants |= entity_grants(frozenset({UNCLASSIFIED}))
+    elif labelling == "referenced":
+        grants |= entity_grants(frozenset({REFERENCED}))
     workspace = Source(
         WORKSPACE,
         Trust.TOOL_UNTRUSTED,
         authoritative_for=(
             frozenset(DEFAULT_KINDS) if labelling == "permissive" else frozenset()
         ),
-        authoritative_paths=SCOPED_GRANTS if scoped else {},
+        authoritative_paths=grants,
         description="the agent's view of the user's SaaS environment",
     )
     return Session(
         contracts=contracts,
         # Denials are not budgeted here: the question is what the monitor
         # decides about each call, not how long a session survives probing.
-        policy=Policy(denial_budget=-1, min_quotation_length=MIN_QUOTATION),
+        policy=Policy(
+            denial_budget=-1,
+            # The floor applies to every labelling alike, including
+            # ``referenced``. Pinning it for one column would make that column
+            # invariant by construction rather than by measurement, and the
+            # sweep is the whole point: reference binding only composes with a
+            # floor, because without one a short id is "quoted" by any prompt
+            # containing that token and the reference check never runs. How
+            # much floor it needs is a measurement, not an assumption.
+            min_quotation_length=MIN_QUOTATION,
+            min_reference_word=MIN_REFERENCE_WORD,
+        ),
         sources=[Source(PRINCIPAL, Trust.USER_INPUT), workspace],
-        budgets=SPEND_BUDGETS if labelling == "recommended" else (),
+        budgets=SPEND_BUDGETS if labelling in ("recommended", "referenced") else (),
         max_observed_chars=64_000_000,
     )
 
@@ -216,7 +248,9 @@ def admit_all(session: Session, calls) -> tuple[bool, str]:
 
 
 def run_suite(name, suite, labelling: str, limit: int | None):
-    contracts = build_contracts(suite, magnitudes_as_content=labelling == "recommended")
+    contracts = build_contracts(
+        suite, magnitudes_as_content=labelling in ("recommended", "referenced")
+    )
     security = Tally()
     utility = Tally()
 
@@ -283,10 +317,22 @@ def main() -> int:
         default=1,
         help="characters a value needs before quoting it counts as evidence",
     )
+    parser.add_argument(
+        "--min-reference-word",
+        type=int,
+        default=8,
+        help="characters a lone quoted word needs before it names a record",
+    )
+    parser.add_argument(
+        "--labelling",
+        action="append",
+        help="restrict to named labellings (repeatable)",
+    )
     args = parser.parse_args()
 
-    global MIN_QUOTATION
+    global MIN_QUOTATION, MIN_REFERENCE_WORD
     MIN_QUOTATION = args.min_quotation
+    MIN_REFERENCE_WORD = args.min_reference_word
 
     sys.path.insert(0, str(args.deps))
     sys.path.insert(0, str(args.agentdojo))
@@ -302,8 +348,17 @@ def main() -> int:
         "permissive": "workspace authoritative for every kind, everywhere",
         "scoped": "workspace authoritative per field path",
         "recommended": "scoped, plus computed magnitudes bounded by a budget",
+        "referenced": "recommended, but directories authorise only records the "
+        "principal named",
     }
-    for label in ("strict", "permissive", "scoped", "recommended"):
+    labellings = args.labelling or [
+        "strict",
+        "permissive",
+        "scoped",
+        "recommended",
+        "referenced",
+    ]
+    for label in labellings:
         print(f"\n=== labelling: {label} ({descriptions[label]}) ===")
         print(f"{'suite':<12} {'security':>18} {'utility':>18}")
         print("-" * 52)

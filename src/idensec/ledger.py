@@ -28,7 +28,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 
 from .kinds import DEFAULT_KINDS, extract, normalise
-from .labels import Origin, Sensitivity, Source, Trust, merge_origins
+from .labels import Origin, Sensitivity, Source, Trust, merge_origins, path_covers
 
 __all__ = [
     "SEAL_PATTERN",
@@ -101,6 +101,56 @@ def _candidate_forms(value: str, minimum: int) -> tuple[str, ...]:
     return tuple(sorted(f for f in forms if len(f) >= minimum))
 
 
+_EDGE_PUNCTUATION = " \t\n\r\"'`()[]{}<>,;:!?*"
+
+_REFERENCE_TRAILING = ".…"
+"""Trailing characters stripped from a word before it is used as a reference.
+
+``.`` is inside :data:`_TOKEN_CHARS` because it is part of ``report.pdf`` and of
+every hostname, so a sentence-ending full stop would otherwise be fused to the
+word before it and match nothing.
+"""
+
+
+def _reference_phrases(text: str, min_word: int) -> tuple[str, ...]:
+    """Fragments of ``text`` that would count as *naming* the record it describes.
+
+    Requiring the principal to quote a descriptive field **in full** is what a
+    first implementation did, and measuring it showed why that is useless: real
+    instructions say "reschedule my Dental check-up" about an event titled
+    ``Dentist Appointment`` whose description is ``Regular dental check-up.``.
+    The overlap is a fragment, never the whole field.
+
+    A fragment counts when it is either a **two-word phrase** or a **single word
+    long enough to be distinctive**. Longer runs need not be generated: quotation
+    is contiguous, so if a three-word run appears in the principal's text then so
+    does its leading pair, which makes checking adjacent pairs sufficient and
+    keeps this linear in the length of the field.
+
+    The threshold on lone words is what stops ``meeting`` or ``report`` -- words
+    that name half the directory -- from binding anything, while leaving
+    ``bill-december.txt`` and ``ACME-4417`` to bind exactly one record.
+
+    Phrases come back case-folded and single-spaced, matching the form in which
+    observations are stored, so they can be tested against the corpus directly.
+    """
+    words = [
+        word
+        for word in (
+            token.strip(_EDGE_PUNCTUATION).rstrip(_REFERENCE_TRAILING).casefold()
+            for token in text.split()
+        )
+        if word
+    ]
+    phrases: list[str] = []
+    for index, word in enumerate(words):
+        if len(word) >= min_word:
+            phrases.append(word)
+        if index + 1 < len(words):
+            phrases.append(f"{word} {words[index + 1]}")
+    return tuple(phrases)
+
+
 def _contains_token(haystack: str, needle: str) -> bool:
     """Substring search that requires identifier boundaries on both sides."""
     start = 0
@@ -149,6 +199,22 @@ class Observation:
     text: str
     sealed: bool
     normalised: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Entity:
+    """A directory record: an id, where it lives, and the text describing it.
+
+    Recorded so that selecting an entity can be checked against whether the
+    principal referred to it -- the one signal that separates "the principal
+    chose this file" from "an injection named this file", which provenance
+    alone cannot.
+    """
+
+    key: str
+    collection: str
+    fields: tuple[str, ...]
+    origin: Origin
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +272,8 @@ class OperandLedger:
         self._by_key: dict[tuple[str, str], Operand] = {}
         self._by_id: dict[str, Operand] = {}
         self._observations: list[Observation] = []
+        self._corpus_cache: dict[frozenset[str], tuple[str, ...]] = {}
+        self._entities: dict[str, list[Entity]] = {}
         self._indexed_chars = 0
 
     # -- introspection ---------------------------------------------------
@@ -299,6 +367,7 @@ class OperandLedger:
                 "max_indexed_chars"
             )
         self._indexed_chars += len(text)
+        self._corpus_cache.clear()
         self._observations.append(
             Observation(
                 step=step,
@@ -309,6 +378,93 @@ class OperandLedger:
                 normalised=" ".join(text.split()).casefold(),
             )
         )
+
+    def record_entity(
+        self, key: str, collection: str, fields: Iterable[str], origin: Origin
+    ) -> None:
+        """Note that ``key`` identifies a record described by ``fields``."""
+        text = tuple(f for f in fields if f and len(f) <= 512)
+        if not key or not text:
+            return
+        self._entities.setdefault(key.strip(), []).append(
+            Entity(key=key.strip(), collection=collection, fields=text, origin=origin)
+        )
+
+    def _corpus_of(self, source_ids: Iterable[str]) -> tuple[str, ...]:
+        """The normalised text of everything observed from ``source_ids``.
+
+        Cached, and invalidated by any new observation. A record has tens of
+        candidate phrases and a session has thousands of observations, so
+        rebuilding this per phrase -- or even per lookup -- is the same
+        quadratic mistake ``derivable_from`` once made, and it announced itself
+        the same way: the AgentDojo run stopped finishing.
+        """
+        wanted = frozenset(source_ids)
+        cached = self._corpus_cache.get(wanted)
+        if cached is None:
+            cached = tuple(
+                observation.normalised
+                for observation in self._observations
+                if observation.source_id in wanted
+            )
+            self._corpus_cache[wanted] = cached
+        return cached
+
+    def entities_for(self, key: str) -> tuple[Entity, ...]:
+        return tuple(self._entities.get(key.strip(), ()))
+
+    def referenced_entities(
+        self,
+        key: str,
+        source_ids: Iterable[str],
+        min_word: int = 8,
+        collection: str = "",
+    ) -> tuple[Entity, ...]:
+        """Entities named ``key``, in ``collection``, of which the principal
+        named some field.
+
+        The check is the ordinary derivation check, applied to fragments of the
+        entity's own descriptive text rather than to the whole field -- see
+        :func:`_reference_phrases` for why the whole field is the wrong unit. It
+        therefore inherits whole-token matching and everything else that makes
+        quotation deterministic, and it is only ever asked of *trusted* sources,
+        so an injection cannot supply the quotation that binds its own target.
+
+        ``collection`` is required, not optional in effect: an empty one matches
+        nothing. Ids are unique inside a directory and meaningless outside it,
+        so without knowing which directory is being addressed, "the principal
+        named record 13" is not a statement about anything.
+        """
+        if not collection:
+            return ()
+        entities = tuple(
+            entity
+            for entity in self.entities_for(key)
+            if path_covers(collection, entity.collection)
+        )
+        if not entities:
+            return ()
+        corpus = self._corpus_of(source_ids)
+        if not corpus:
+            return ()
+        return tuple(
+            entity
+            for entity in entities
+            if any(
+                any(_contains_token(text, phrase) for text in corpus)
+                for field in entity.fields
+                for phrase in _reference_phrases(field, min_word)
+            )
+        )
+
+    def is_referenced(
+        self,
+        key: str,
+        source_ids: Iterable[str],
+        min_word: int = 8,
+        collection: str = "",
+    ) -> bool:
+        return bool(self.referenced_entities(key, source_ids, min_word, collection))
 
     # -- resolution ------------------------------------------------------
 

@@ -25,8 +25,8 @@ from enum import IntEnum
 from typing import Any
 
 from .contracts import ContractRegistry, Effect, ParameterContract, Role, ToolContract
-from .kinds import KIND_REGISTRY
-from .labels import Source
+from .kinds import KIND_REGISTRY, REFERENCED
+from .labels import Source, path_covers
 
 __all__ = ["Diagnostic", "Severity", "lint_contract", "lint_registry", "lint_sources"]
 
@@ -298,10 +298,13 @@ def lint_sources(
     """Cross-check source grants against what contracts actually consume."""
     found: list[Diagnostic] = []
     consumed: set[str] = set()
+    collections: list[str] = []
     for contract in registry:
         for spec in contract.parameters.values():
             if spec.role is Role.AUTHORITY:
                 consumed |= set(spec.kinds)
+                if spec.collection:
+                    collections.append(spec.collection)
 
     for source in sources:
         if source.is_principal:
@@ -315,6 +318,24 @@ def lint_sources(
                     "operator; a tool at this tier can name any destination it likes.",
                 )
             )
+        for prefix, kinds in source.authoritative_paths:
+            if REFERENCED not in kinds:
+                continue
+            if not any(
+                path_covers(prefix, collection) or path_covers(collection, prefix)
+                for collection in collections
+            ):
+                found.append(
+                    Diagnostic(
+                        Severity.WARNING,
+                        "inert-reference-grant",
+                        source.id,
+                        f"grants {REFERENCED!r} at {prefix!r}, but no authority-bearing "
+                        "parameter declares a collection under that path. Reference "
+                        "binding will never fire, so the grant denies everything the "
+                        "path would otherwise have allowed.",
+                    )
+                )
         for kind in sorted(source.authoritative_for):
             if kind not in KIND_REGISTRY:
                 found.append(

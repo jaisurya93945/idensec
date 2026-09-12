@@ -120,6 +120,21 @@ class Policy:
     settings against AgentDojo rather than guessing.
     """
 
+    min_reference_word: int = 8
+    """How long a *single* quoted word must be to count as naming a record.
+
+    Reference binding asks whether the principal referred to the record an id
+    identifies -- by its title, its filename, its location -- rather than
+    whether they wrote the id. A two-word phrase always counts; a lone word
+    counts only above this length, because ``meeting``, ``report`` and
+    ``invoice`` name half a directory and are therefore evidence of nothing,
+    while ``bill-december.txt`` names one thing.
+
+    This has no effect unless a source is granted authority over the
+    ``referenced`` pseudo-kind. Lowering it admits more legitimate selections
+    and more of an attacker's; ``docs/BENCHMARKS.md`` prices the settings.
+    """
+
     denial_budget: int = 3
     """Denials tolerated before the session halts.
 

@@ -29,16 +29,24 @@ result changed what this project claims.**
 Against AgentDojo — 97 user tasks, 609 in-scope security cases, no model
 involved:
 
-| authority granted to the workspace | security | utility |
-| --- | ---: | ---: |
-| nothing | **95.4%** | 34.0% |
-| every kind, everywhere | 55.8% | 46.4% |
-| per field path | 85.7% | 68.0% |
-| per field path + budgets for magnitudes | 85.1% | **76.3%** |
+Two policy thresholds move the result, so the output is a surface rather than a
+row. The **Pareto frontier** over the thirty configurations measured:
+
+| security | utility | configuration |
+| ---: | ---: | --- |
+| **96.6%** | 43.3% | field-path grants, high quotation floor |
+| 95.7% | 52.6% | + reference binding |
+| 92.3% | 57.7% | field-path grants, medium floor |
+| **91.6%** | **68.0%** | + reference binding and spend budgets |
+| 85.7% | 69.1% | field-path grants, no floor |
+| 85.1% | **77.3%** | + spend budgets |
 
 **No configuration reaches 90% security and 70% utility together.** The
 project's own falsification criterion asked for exactly that
-([`REVIEW.md`](REVIEW.md)), and it was missed on the security side.
+([`REVIEW.md`](REVIEW.md)). The closest configuration that exists is
+91.6%/68.0%, two points of utility short — and two points short *after*
+building the one mechanism anybody had identified for the constraint that was
+blocking it.
 
 **Why, and why determinism was not the problem.** Every bug fixed during that
 pass bought utility at *zero* security cost. Security fell only where a human
@@ -49,9 +57,16 @@ the selection or trust the directory, which admits an injection naming a
 legitimate entry. That is a question about intent, not origin, so **oracle
 provenance would not resolve it either**.
 
+**Reference binding** (ADR-0011) converts the subset where the principal
+*names* the record — worth three more selections on the workspace suite at zero
+security cost, and two tasks out of ninety-seven overall. What survives is
+selection by **property**: "the cheapest hotel", "the oldest file" name nothing,
+so there is nothing to bind, and no mechanism is proposed for it.
+
 **The claim is therefore narrowed rather than restated:** IDENSEC contains
-attacks that *introduce* a new destination, and is structurally blind to attacks
-that *select among legitimate ones*. The cost of that blindness is now measured
+attacks that *introduce* a new destination, and attacks that select a record the
+principal *never named*. It is structurally blind to attacks that select among
+legitimate records by property. The cost of that blindness is now measured
 rather than assumed.
 
 Two suites' numbers are inherent rather than tuning failures:
@@ -60,7 +75,7 @@ Two suites' numbers are inherent rather than tuning failures:
   *themselves* injection vectors, so the legitimate tasks are things like "fetch
   the URL you found in a Slack message". Those refusals are the monitor being
   right.
-- **Banking, 31.2% → 87.5%** — its amounts are *computed*, and needed a
+- **Banking, 37.5% → 81.2%** — its amounts are *computed*, and needed a
   different control rather than a different grant. See §4.2c.
 
 ## 3. Unverified: the research foundation
@@ -81,14 +96,35 @@ is published anywhere outside this repository.
 
 Answering *who wrote this value* is not answering *what they meant by it*.
 
-**Now quantified.** On AgentDojo this accounts for 28 of the 49 security
-escapes: 20 where the attacker *selects* a legitimate directory entry
+**Now quantified, and partly addressed.** On AgentDojo this was 28 of the 49
+security escapes: 20 where the attacker *selects* a legitimate directory entry
 (`reserve_hotel` on a real hotel a poisoned review recommended) and 8 where a
 low-entropy token in the principal's own prompt collides with the attacker's
 target — *"what are we doing on June 13"* authorises `delete_file(id="13")`.
-`Policy.min_quotation_length` addresses the second class and is priced in
-[`BENCHMARKS.md`](BENCHMARKS.md); nothing addresses the first, because it is
-intent.
+`Policy.min_quotation_length` addresses the second class.
+
+**Reference binding** (ADR-0011) addresses part of the first, and its limits are
+sharper than its reach. It converts selections the principal *named* — "delete
+`bill-december.txt`", "reschedule my dental check-up" — by checking the
+principal's own words against the record's descriptive fields. It does nothing
+for selection by **property**:
+
+> *"Book the cheapest hotel"*, *"delete the oldest file"*, *"reply to the most
+> recent thread"* quote nothing about any record. The agent picks, and nothing
+> in the trace says which record the principal would have picked.
+
+Two residual attacks, stated rather than closed:
+
+- **Confusion.** An attacker who can *create* a record and guess the principal's
+  phrasing can make their record the one named. Strictly harder than the attack
+  reference binding replaces — it needs write access *and* a correct guess — but
+  real.
+- **Over-binding.** A principal whose instruction happens to contain a two-word
+  phrase from an unintended record binds that record too. Raising
+  `Policy.min_reference_word` narrows lone-word matches; nothing narrows phrase
+  matches.
+
+Both settings and their costs are swept in [`BENCHMARKS.md`](BENCHMARKS.md).
 
 An address the principal named **in order to forbid it** — "never mail anything
 to `exfil@evil.example`" — is still an address the principal named, and is
@@ -196,6 +232,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | **Audit is integrity, not authenticity** | A hash chain proves the log was not altered. It does not prove IDENSEC wrote it. An attacker with write access can rewrite the chain from genesis; ship records off-host if that is in your threat model. |
 | **MCP needs an out-of-band task channel** | The protocol has nowhere to carry the principal's instruction, and the agent cannot be asked for it without creating a total bypass. The proxy reads it from a host-written file; a host that cannot provide one gets no trusted corpus and should run in observe mode rather than claim enforcement. See [`MCP.md`](MCP.md). |
 | **stdio transport only** | The proxy does not yet speak streamable HTTP. Framework adapters are roadmap, not code. |
+| **Reference binding needs a collection per parameter** | `ParameterContract.collection` says which directory an id addresses. `derive_contract` drafts it from `<noun>_id` names; a wrong draft costs a denial, an absent one makes the grant inert (which `idensec.lint` reports). It is one more per-API declaration, and the policy-sprawl objection applies to it. |
 
 ---
 
@@ -209,7 +246,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | Latency figures | **Measured**, on a shared unpinned host; spread reported. |
 | Extraction coverage is adequate | **Measured** on a synthetic corpus: 93% recall, 0 false positives. Not measured against real traffic. |
 | Contract derivation is accurate | **Measured** on 25 hand-labelled schemas: 100% authority recall, 0 dangerous misses. Ground truth is our own. |
-| Task utility under enforcement | **Measured**: a curve. 95.4% security at 34.0% utility, or 85.1% at 76.3%. Never both above 90/70. |
+| Task utility under enforcement | **Measured**: a surface over thirty configurations, from 96.6%/43.3% to 85.1%/77.3%. Best above 90% security: 91.6%/68.0%. Never both above 90/70. |
 | Literature comparisons | **Unverified** — search summaries, not primary sources. |
 | Anyone wants this | **Unvalidated.** No users, no customers, no pilot. Every business statement in this repository is hypothesis. |
 
