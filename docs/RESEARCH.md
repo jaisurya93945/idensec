@@ -708,6 +708,57 @@ number for what sealing costs.
 
 ---
 
+## Thread 3i — The whole pipeline, off-benchmark (2026-09-12)
+
+`EXPERIMENT` — Ran the `idensec.mcp` proxy in front of an unmodified
+`@modelcontextprotocol/server-filesystem`, with a document containing an HTML
+comment instructing the assistant to overwrite a payroll file and move a secrets
+file. Agent assumed fully hijacked. Two source labellings, same attack.
+`examples/mcp/attack_filesystem.py`.
+
+`RESULT` — **The published boundary reproduces off-benchmark.** Under the
+labelling an operator would actually write, the injected *overwrite* of a file
+the server listed **succeeds**, and the injected *move* to a destination nothing
+ever named is **refused**. That is:
+
+> IDENSEC contains attacks that introduce a new destination. It does not contain
+> attacks that merely select among legitimate ones.
+
+written months earlier from AgentDojo, and now observed on software we did not
+write, through the real proxy, with a real injection. It is the closest thing to
+independent confirmation this project has.
+
+`RESULT` — **The strict labelling refuses the principal's own read.** 100%
+security and 0% utility, on a two-step task. Reporting that as a security result
+would be the dishonest version of this entry.
+
+`RESULT` — **Our own flagship example contract covered 4 of the server's 14
+tools**, the missing ten including `read_text_file`, the primary read path. It
+failed closed, which is the right direction and no use at all. The per-API cost
+this project claims to reduce is no longer an abstraction: fourteen tools, every
+effect declared by hand.
+
+`FACT` — **An agent cannot address a filesystem whose root it has not been
+told.** Every path-taking tool needs a path; the principal wrote "my notes
+folder". The only way in is `list_allowed_directories`, which takes no arguments
+and therefore has nothing to refuse. Any containment design has this bootstrap
+problem, and a server without a zero-argument discovery tool cannot be used
+under one at all. Recorded as a finding about the ecosystem, not about us.
+
+`INFERENCE` — **Path construction is the filesystem's version of computed
+amounts.** A path joined from a principal-named leaf and a server-named root is
+a string neither ever emitted, so it traces to nobody. Amounts had a fallback —
+a budget bounds a magnitude. A path has none. Whether a joined path can be
+attributed component-wise is the open question; we have not built it and are not
+claiming it works.
+
+`FACT` — `edit_file.dryRun` is a safety flag, and role cannot express "this
+boolean may be strengthened but not weakened". Marking it `AUTHORITY` would deny
+every legitimate edit, because booleans are not attributable. Left advisory,
+with the gap written into the shipped contract where a reviewer will see it.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

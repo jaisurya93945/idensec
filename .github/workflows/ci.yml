@@ -83,6 +83,12 @@ jobs:
       - name: Example runs
         run: python examples/summarise_and_mail.py
 
+      - name: End-to-end against a real MCP server
+        # Drives the proxy in front of an unmodified
+        # @modelcontextprotocol/server-filesystem under a real injection. Fails
+        # if the strict labelling ever admits an injected call.
+        run: python examples/mcp/attack_filesystem.py
+
       - name: Benchmarks run
         run: python benchmarks/bench_monitor.py --quick
 

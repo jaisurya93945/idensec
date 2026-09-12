@@ -293,6 +293,16 @@ measurement immediately found the `hostname` filter was a *blocklist*, so
 244 operands, or every line of Python an agent reads. A TLD allowlist took that
 to zero at no cost to recall.
 
+**End to end, against software we did not write** — the proxy in front of an
+unmodified `@modelcontextprotocol/server-filesystem`, with the agent assumed
+fully hijacked by a document it reads. The injected **move** to a destination
+nothing ever named is refused; the injected **overwrite** of a file the server
+itself listed succeeds. That is the boundary above, reproduced off-benchmark:
+
+```
+python3 examples/mcp/attack_filesystem.py
+```
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```

@@ -1,10 +1,29 @@
 {
   "schema": "idensec.contracts/v1",
   "_comment": [
-    "Hand-completed from drafts produced by --emit-contracts.",
-    "Effects are declared by a human because they cannot be inferred from a",
-    "schema: guessing that a tool is read-only is the most dangerous inference",
-    "this system could make."
+    "Contracts for @modelcontextprotocol/server-filesystem, covering all 14",
+    "tools it advertises. Drafted with derive_contract() from the server's own",
+    "schemas (benchmarks/data/mcp_tools.json) and then completed by a human.",
+    "",
+    "An earlier version of this file covered four tools. The server has",
+    "fourteen, and the missing ten included read_text_file -- the primary read",
+    "path -- so the example denied most of the server it was named after. It",
+    "failed closed, which is the right direction and no use to anybody. That is",
+    "the per-API cost this project claims to reduce, made concrete.",
+    "",
+    "What a human supplied, because a deriver cannot:",
+    "  - every effect. move_file is DELETE as well as WRITE, because it removes",
+    "    the source. write_file and edit_file are IRREVERSIBLE: they overwrite.",
+    "  - kinds on move_file.source/destination, which the deriver left empty",
+    "    because the names do not contain 'path'.",
+    "  - edits and excludePatterns downgraded to payload. The draft marked them",
+    "    authority, which is the restrictive default; the path is what decides",
+    "    where an edit lands, and the replacement text is content.",
+    "",
+    "Known gap, recorded rather than papered over: edit_file.dryRun is a safety",
+    "flag, and an injection that flips it from true to false turns a preview",
+    "into a real write. Role cannot express 'this boolean may be strengthened",
+    "but not weakened'. See docs/LIMITATIONS.md."
   ],
   "contracts": [
     {
@@ -12,8 +31,40 @@
       "version": 1,
       "effects": ["read"],
       "default_role": "authority",
+      "description": "Deprecated alias of read_text_file.",
       "parameters": {
-        "path": {"role": "authority", "kinds": ["posix_path"]}
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "head": {"role": "advisory"},
+        "tail": {"role": "advisory"}
+      }
+    },
+    {
+      "tool": "read_text_file",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "head": {"role": "advisory"},
+        "tail": {"role": "advisory"}
+      }
+    },
+    {
+      "tool": "read_media_file",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
+      }
+    },
+    {
+      "tool": "read_multiple_files",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "paths": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
       }
     },
     {
@@ -22,8 +73,39 @@
       "effects": ["write", "irreversible"],
       "default_role": "authority",
       "parameters": {
-        "path": {"role": "authority", "kinds": ["posix_path"]},
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
         "content": {"role": "payload"}
+      }
+    },
+    {
+      "tool": "edit_file",
+      "version": 1,
+      "effects": ["write", "irreversible"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "edits": {"role": "payload"},
+        "dryRun": {"role": "advisory"}
+      }
+    },
+    {
+      "tool": "create_directory",
+      "version": 1,
+      "effects": ["write"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
+      }
+    },
+    {
+      "tool": "move_file",
+      "version": 1,
+      "effects": ["write", "delete", "irreversible"],
+      "default_role": "authority",
+      "description": "Renames, and therefore removes the source.",
+      "parameters": {
+        "source": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "destination": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
       }
     },
     {
@@ -32,7 +114,27 @@
       "effects": ["read"],
       "default_role": "authority",
       "parameters": {
-        "path": {"role": "authority", "kinds": ["posix_path"]}
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
+      }
+    },
+    {
+      "tool": "list_directory_with_sizes",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "sortBy": {"role": "advisory"}
+      }
+    },
+    {
+      "tool": "directory_tree",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "excludePatterns": {"role": "payload"}
       }
     },
     {
@@ -41,9 +143,26 @@
       "effects": ["read"],
       "default_role": "authority",
       "parameters": {
-        "path": {"role": "authority", "kinds": ["posix_path"]},
-        "pattern": {"role": "payload"}
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "pattern": {"role": "payload"},
+        "excludePatterns": {"role": "payload"}
       }
+    },
+    {
+      "tool": "get_file_info",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "path": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
+      }
+    },
+    {
+      "tool": "list_allowed_directories",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {}
     }
   ]
 }

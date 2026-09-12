@@ -196,6 +196,43 @@ kept in the defaults because one code-heavy corpus is not grounds for weakening
 a default and because removing it breaks any contract that declares the kind —
 not because the rate is acceptable. See [`BENCHMARKS.md`](BENCHMARKS.md).
 
+### 4.2e Constructed values cannot be attributed, and paths are the common case
+
+The principal writes *"brief.md in my notes folder"*; the tool takes
+`/srv/notes/brief.md`. The agent must **join** a name the principal gave to a
+root the server gave, and the result is a string neither of them ever emitted —
+so it traces to nobody and is denied, under every labelling.
+
+This is the same shape as computed amounts (§4.2c), and worse in one respect:
+an amount can be bounded by a budget, and a path cannot. What rescues it in
+practice is that some tools return absolute paths (`search_files` does,
+`list_directory` does not), so an agent that discovers before it acts produces
+values the server really emitted. That is a property of the *server's* API, not
+of anything IDENSEC can guarantee.
+
+There is also a bootstrap: every path-taking tool needs a path, so an agent
+cannot address a filesystem whose root it has not been told. The only way in is
+a zero-argument tool such as `list_allowed_directories`, which has nothing to
+attribute and therefore nothing to refuse. A containment design without such a
+tool cannot start at all.
+
+Both found by running the proxy against a real MCP server rather than a
+benchmark — see [`BENCHMARKS.md`](BENCHMARKS.md). **No mechanism is proposed**;
+component-wise attribution of a joined path is the obvious candidate and is not
+built.
+
+### 4.2f A safety flag cannot be protected by role
+
+`edit_file` takes `dryRun`. An injection that flips it from `true` to `false`
+turns a preview into a real write, at a path the principal did authorise.
+`Role` says whether a parameter determines *what the action does to the world* —
+it cannot say "this boolean may be strengthened but not weakened", which is a
+constraint on the value, not on the parameter.
+
+Marking it `AUTHORITY` is not the fix: booleans are almost never attributable,
+so it would deny every legitimate edit. Recorded in the shipped contract for
+that tool, where a reviewer will see it.
+
 ### 4.3 Extraction coverage is a security parameter
 
 A value whose kind is not registered is never sealed. Nine kinds ship by
