@@ -61,6 +61,15 @@ I = {"type": "integer"}  # noqa: E741 - matches the JSON Schema vocabulary
 B = {"type": "boolean"}
 
 CORPUS: list[ToolCase] = [
+    # A bare integer `id`. The deriver drafted this ADVISORY for most of its
+    # life -- numerics were downgraded, and "id" does not end in "_id" -- which
+    # left the parameter deciding *which* record a financial write lands on
+    # entirely unchecked. Found by an AgentDojo number moving the wrong way,
+    # not by this corpus, which had no such case until now.
+    tool("update_scheduled_transaction", "finance",
+         {"id": I, "amount": N, "recipient": S, "recurring": B},
+         {"id": A, "amount": A, "recipient": A, "recurring": V}),
+    tool("cancel_order", "commerce", {"id": I, "reason": S}, {"id": A, "reason": P}),
     tool("read_file", "filesystem", {"path": S}, {"path": A}),
     tool("write_file", "filesystem", {"path": S, "content": S},
          {"path": A, "content": P}),

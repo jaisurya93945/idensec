@@ -135,6 +135,38 @@ class Policy:
     and more of an attacker's; ``docs/BENCHMARKS.md`` prices the settings.
     """
 
+    compose_paths: bool = False
+    """Admit a path whose *components* are each attributed and authorised.
+
+    Off by default, because turning it on admits values that are otherwise
+    denied.
+
+    The problem it addresses is not hypothetical and was found by running the
+    proxy against a real filesystem MCP server: the principal writes "brief.md
+    in my notes folder", the tool takes ``/srv/notes/brief.md``, and the agent
+    has to **join** the two. The joined string was emitted by nobody, so it
+    traces to nobody, and every labelling denies it -- including the
+    principal's own request.
+
+    With this on, a path is admissible when it splits at a separator into a
+    prefix and a remainder that are *both* attributed to sources authorised for
+    them. That is a **universal** condition, not the existential one the rest of
+    the system uses, and deliberately so: the prefix says which tree, the
+    remainder says which file in it, and an attacker who supplies either half
+    has chosen something.
+
+    What it buys, measured on that same server: a deployment can grant the
+    server authority over its own root *only*, and still let the principal open
+    a file they named -- while an injection naming a different real file in the
+    same directory is refused, because the name it chose is attributable only to
+    the injection. Granting the whole tree admits both.
+
+    ``..`` is refused outright rather than decomposed. ``/srv/notes`` and
+    ``../../etc/shadow`` can each be attributable while their join escapes the
+    tree entirely, and a traversal is exactly the authority decision this must
+    not get wrong.
+    """
+
     denial_budget: int = 3
     """Denials tolerated before the session halts.
 

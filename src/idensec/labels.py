@@ -282,6 +282,20 @@ class Attribution:
     ``reference-bound`` also affects permission, and only where a source grants
     :data:`~idensec.kinds.REFERENCED`."""
 
+    composed: bool = False
+    """Every component of this value was separately attributed and authorised.
+
+    Set only by the composition rule, which exists because a path an agent
+    *builds* -- a root the server disclosed joined to a name the principal wrote
+    -- is a string neither of them ever emitted, and so traces to nobody.
+
+    It bypasses :meth:`is_authorised_for` because that check is **existential**
+    and composition is **universal**: composition has already required *every*
+    component to be authorised, which is strictly stronger, and re-running the
+    existential rule over the merged origins would weaken it to "some component
+    was fine".
+    """
+
     reference_bound: bool = False
     """The value identifies an entity the principal quoted a field of.
 
@@ -309,6 +323,9 @@ class Attribution:
         """
         if self.state is AttributionState.UNATTRIBUTED:
             return False
+        if self.composed:
+            # Already decided, and decided more strictly. See Attribution.composed.
+            return True
         for origin in self.origins:
             source = sources.get(origin.source_id)
             if source is None:

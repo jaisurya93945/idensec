@@ -6,6 +6,82 @@ comfortable, it was written badly.
 
 ---
 
+## 2026-09-12 (later) — a benchmark number moved the wrong way, and it was right to
+
+Three things happened after the previous entry, and the order matters.
+
+**Ran the whole pipeline against a real MCP server.** Not the monitor, not a
+benchmark: the proxy in front of an unmodified
+`@modelcontextprotocol/server-filesystem`, under a document that tries to
+hijack the agent reading it. It reproduced this project's published boundary
+off-benchmark — an *introduced* destination refused, a *selected* one admitted —
+and found three things no benchmark had: our own flagship contract covered 4 of
+that server's 14 tools; an agent cannot address a filesystem whose root it has
+not been told; and a **constructed** path traces to nobody.
+
+**Built composition, having said there was no mechanism.** That claim was wrong
+and the correction is the more interesting result. Entity ids have no internal
+structure; **paths do**. Attribute each component and the join is decided. On
+the same real server it is the first configuration that admits the principal's
+read and refuses both injected calls.
+
+> The boundary we publish is a statement about **values**, not about provenance.
+> "Does not contain attacks that select among legitimate ones" held because the
+> value was opaque. Decompose the value and the boundary moves.
+
+That is a narrowing of what Threads 3e–3f were taken to show, and it is the
+correction this entry exists for.
+
+**Then the AgentDojo curve moved down.** Best configuration above 90% security:
+91.6%/68.0% → **91.8%/64.9%**.
+
+### The utility drop was the security fix
+
+The deriver had been treating a bare `id` parameter as **advisory** — unchecked
+— whenever its schema said `integer`. On AgentDojo's banking suite that is
+`update_scheduled_transaction(id, amount, recipient)`: the parameter deciding
+which transaction a financial write lands on.
+
+A dangerous miss, in the component whose entire job is not to make them, on the
+most consequential tool class in the benchmark. It had been there since the
+deriver existed, through two milestones that reported its numbers approvingly.
+
+**It was found because a number moved in the wrong direction.** A project
+reporting a single headline figure would have been improved by leaving the hole
+in — which is the whole argument for publishing a curve, and it only paid off
+once something regressed.
+
+Two further gaps surfaced while tracking it down, neither rewarded by this
+benchmark: numeric leaves were never indexed at all, so `{"id": 7}` was
+permanently unattributable; and only dict-keyed directories counted as entity
+records, so reference binding never fired on a JSON array — the commoner shape.
+
+### Is the thesis disproven?
+
+**Still no, still not confirmed, and the gap to the bar got wider rather than
+narrower.** Five points of utility short at ≥90% security, having been two. The
+honest reading is that the earlier two-point figure was partly an artefact of an
+unchecked parameter, so the design was never as close as the last entry said.
+
+What did improve is not on the curve: the proxy now works against real servers,
+contracts exist for one of them in full, and the boundary claim has been
+reproduced on software we did not write. Those are deployability results, and
+this project has always said deployability is not the thing in doubt.
+
+### The strongest criticism, updated again
+
+> *"Every milestone finds a bug in your own security component. At what point is
+> that evidence the component is too subtle to get right?"*
+
+It is a fair question and I do not think three milestones settles it. What can
+be said: each defect was found by measurement rather than review, each is now a
+regression test, and the rate is not falling. A design whose correctness depends
+on twelve separate judgements about what counts as authority is a design with a
+large surface for exactly this. That belongs in the argument *against* the
+approach, and it is written here rather than in a footnote.
+
+---
+
 ## 2026-09-12 — the one identified answer, built, and worth two tasks
 
 The previous entry named entity selection as the binding constraint and gave
@@ -31,7 +107,7 @@ benchmark it is **two tasks out of ninety-seven**. Both rows are here because
 reporting only the first would be the flattering version.
 
 **The criterion is still missed.** 90% security and 70% utility together was the
-bar. 91.6%/68.0% is the closest configuration that exists, two points short, and
+bar. 91.6%/68.0% was the closest configuration at the time, two points short, and
 it is two points short after the one mechanism anybody had identified for the
 constraint that was blocking it.
 

@@ -538,7 +538,7 @@ exercises entity selection, and **less than hoped in aggregate**. On the
 workspace suite it admits three previously-refused selections at **zero**
 security cost (utility 70.0% → 77.5%, security 100% either way). Across all four
 suites, with both policy knobs swept rather than fixed, the best configuration
-above 90% security moves from **91.6%/66.0%** to **91.6%/68.0%** — two tasks out
+above 90% security moves from **91.8%/62.9%** to **91.8%/64.9%** — two tasks out
 of ninety-seven. The full sweep, including the rows where it loses, is in
 [`BENCHMARKS.md`](BENCHMARKS.md).
 
@@ -596,3 +596,82 @@ injections live, and quoting one must never bind a reference.
   floor, because below one a short id is "quoted" by any instruction containing
   that token and the reference check never runs. Both are swept together in
   [`BENCHMARKS.md`](BENCHMARKS.md); neither is reported alone.
+
+---
+
+## ADR-0012 — Composition: decompose the value, not the provenance
+
+**Status:** accepted · 2026-09-12
+
+### Problem
+
+Running the proxy against a real filesystem MCP server exposed a failure no
+benchmark had: the principal writes *"brief.md in my notes folder"*, the tool
+takes `/srv/notes/brief.md`, and the agent must **join** a name the principal
+gave to a root the server gave. The joined string was emitted by neither, so it
+traces to nobody, and every labelling denies it — **including the principal's
+own request**.
+
+The workaround an operator reaches for is to make the server authoritative for
+every path it returns. That works, and it admits an injection naming any other
+real file in the same directory. Measured end to end: the legitimate read
+succeeds and so does the attacker's overwrite.
+
+### Alternatives considered
+
+1. **Require the host to supply absolute paths** in the principal's task. Shifts
+   an impossible job onto the host: users do not write absolute paths.
+2. **Grant the server authority over its whole tree.** Available today, and
+   costs exactly the attack above.
+3. **Decompose the value.** A path splits at separators into parts that mean
+   something alone. Attribute and authorise each part, and admit the join only
+   when every part stands up.
+
+### Evidence
+
+Option 3 discriminates where nothing else does, measured on the same real
+server with the same injection:
+
+| | legitimate read | injected overwrite | injected move |
+| --- | --- | --- | --- |
+| server authoritative for nothing | deny | deny | deny |
+| server authoritative for every path it returns | **allow** | **ALLOW** | deny |
+| server authoritative for its **root**, paths compose | **allow** | deny | deny |
+
+The third row is the first configuration that gets all three right. The leaf
+`brief.md` is attributable to the principal, who wrote it; `payroll.csv` is
+attributable only to the document that asked for it.
+
+The check must be **universal**, not existential (ADR-0008). The prefix chooses
+the tree and the remainder chooses the file, so an attacker supplying either
+half has chosen something. An existential check would let an authorised root
+carry an unnamed leaf, which is the whole attack.
+
+### Decision
+
+Option 3, as `Policy.compose_paths`, **off by default** because enabling it
+admits values that are otherwise denied. It applies only to path-kinded values,
+and `..` is refused outright rather than decomposed: `/srv/notes` and
+`../../etc/shadow` can each be attributable while their join leaves the tree.
+
+### Consequences
+
+- **The boundary this project publishes is about values, not about provenance.**
+  "IDENSEC does not contain attacks that select among legitimate destinations"
+  held because the *value* was opaque. Decompose the value and the boundary
+  moves. That reframes ADR-0011's entity-selection limit as a statement about
+  identifiers having no internal structure, rather than about intent being
+  unknowable.
+- **It generalises no further than its grammar.** An entity id does not split.
+  *"Open the oldest file"* names nothing to split. Composition converts the case
+  where the principal named a **component**, which for filesystems is most of
+  them and for directories is none.
+- **One more per-API decision.** The narrow grant has to be scoped to the tool
+  that discloses the root, which an operator must identify. The proxy records
+  results at `<tool>.result`, so this is expressible, but it is another line
+  someone writes and can get wrong.
+- **Composition runs when attribution *succeeds but is unauthorised*, not only
+  when it fails.** That was missed by a first implementation, and the mechanism
+  then never fired against a real server at all: a path read out of a directory
+  listing is perfectly attributable — to a listing the source is not
+  authoritative for.

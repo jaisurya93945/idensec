@@ -24,10 +24,10 @@ same trace always produces the same verdict.
 
 > **Status: 0.1, early and unreviewed.** Measured against AgentDojo with no
 > model in the loop, the result is a **trade-off surface, not a number**: from
-> 96.6% security at 43.3% utility to 85.1% at 77.3%, depending on how much
-> authority a deployment grants and where it sets two policy thresholds.
+> 96.7% security at 43.3% utility to 85.2% at 74.2%, depending on how much
+> authority a deployment grants and where it sets its policy thresholds.
 > **No configuration reaches 90% security and 70% utility together** — the best
-> is 91.6%/68.0%. The project's own falsification criterion asked for both and
+> is 91.8%/64.9%. The project's own falsification criterion asked for both and
 > did not get them, and [`docs/REVIEW.md`](docs/REVIEW.md) says so in its own
 > title. Read that and [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) before
 > anything else here.
@@ -245,15 +245,16 @@ over every configuration measured:
 
 | security | utility | configuration |
 | ---: | ---: | --- |
-| **96.6%** | 43.3% | field-path grants, high quotation floor |
-| 95.7% | 52.6% | + reference binding |
-| 92.3% | 57.7% | field-path grants, medium floor |
-| **91.6%** | **68.0%** | + reference binding and spend budgets |
-| 85.7% | 69.1% | field-path grants, no floor |
-| 85.1% | **77.3%** | + spend budgets |
+| **96.7%** | 43.3% | field-path grants, high quotation floor |
+| 95.9% | 49.5% | + reference binding |
+| 92.4% | 57.7% | field-path grants, medium floor |
+| **91.8%** | **64.9%** | + reference binding and spend budgets |
+| 85.9% | 69.1% | field-path grants, no floor |
+| 85.2% | **74.2%** | + spend budgets |
 
-The full 6×5 sweep, the rows that do not flatter the design, and the nine defects
-the measurement found are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+The full 6×5 sweep, the rows that do not flatter the design, and the twelve
+defects the measurement found — including a **dangerous miss** whose fix cost
+three points of utility — are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 Every escape is traced to a cause, and all fall into limitations documented
 *before* the measurement existed. The boundary it draws:
@@ -295,9 +296,11 @@ to zero at no cost to recall.
 
 **End to end, against software we did not write** — the proxy in front of an
 unmodified `@modelcontextprotocol/server-filesystem`, with the agent assumed
-fully hijacked by a document it reads. The injected **move** to a destination
-nothing ever named is refused; the injected **overwrite** of a file the server
-itself listed succeeds. That is the boundary above, reproduced off-benchmark:
+fully hijacked by a document it reads. Grant the server nothing and the
+principal's own read is refused too. Grant it every path it returns and the
+injected **overwrite** succeeds. Grant it only its own **root** and let paths
+*compose* — a root the server disclosed joined to a leaf the principal wrote —
+and all three calls come out right:
 
 ```
 python3 examples/mcp/attack_filesystem.py

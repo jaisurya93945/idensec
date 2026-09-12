@@ -89,6 +89,7 @@ PRINCIPAL = "principal"
 WORKSPACE = "workspace"
 MIN_QUOTATION = 1
 MIN_REFERENCE_WORD = 8
+COMPOSE_PATHS = False
 
 
 @dataclass
@@ -227,6 +228,7 @@ def make_session(contracts: ContractRegistry, labelling: str) -> Session:
             # much floor it needs is a measurement, not an assumption.
             min_quotation_length=MIN_QUOTATION,
             min_reference_word=MIN_REFERENCE_WORD,
+            compose_paths=COMPOSE_PATHS,
         ),
         sources=[Source(PRINCIPAL, Trust.USER_INPUT), workspace],
         budgets=SPEND_BUDGETS if labelling in ("recommended", "referenced") else (),
@@ -324,15 +326,21 @@ def main() -> int:
         help="characters a lone quoted word needs before it names a record",
     )
     parser.add_argument(
+        "--compose-paths",
+        action="store_true",
+        help="admit a path whose components are each attributed and authorised",
+    )
+    parser.add_argument(
         "--labelling",
         action="append",
         help="restrict to named labellings (repeatable)",
     )
     args = parser.parse_args()
 
-    global MIN_QUOTATION, MIN_REFERENCE_WORD
+    global MIN_QUOTATION, MIN_REFERENCE_WORD, COMPOSE_PATHS
     MIN_QUOTATION = args.min_quotation
     MIN_REFERENCE_WORD = args.min_reference_word
+    COMPOSE_PATHS = args.compose_paths
 
     sys.path.insert(0, str(args.deps))
     sys.path.insert(0, str(args.agentdojo))

@@ -34,19 +34,21 @@ row. The **Pareto frontier** over the thirty configurations measured:
 
 | security | utility | configuration |
 | ---: | ---: | --- |
-| **96.6%** | 43.3% | field-path grants, high quotation floor |
-| 95.7% | 52.6% | + reference binding |
-| 92.3% | 57.7% | field-path grants, medium floor |
-| **91.6%** | **68.0%** | + reference binding and spend budgets |
-| 85.7% | 69.1% | field-path grants, no floor |
-| 85.1% | **77.3%** | + spend budgets |
+| **96.7%** | 43.3% | field-path grants, high quotation floor |
+| 95.9% | 49.5% | + reference binding |
+| 92.4% | 57.7% | field-path grants, medium floor |
+| **91.8%** | **64.9%** | + reference binding and spend budgets |
+| 85.9% | 69.1% | field-path grants, no floor |
+| 85.2% | **74.2%** | + spend budgets |
 
 **No configuration reaches 90% security and 70% utility together.** The
 project's own falsification criterion asked for exactly that
 ([`REVIEW.md`](REVIEW.md)). The closest configuration that exists is
-91.6%/68.0%, two points of utility short — and two points short *after*
-building the one mechanism anybody had identified for the constraint that was
-blocking it.
+91.8%/64.9%, five points of utility short. It was two points short until a
+**dangerous miss** was found in the deriver — a bare `id` on a financial write
+tool drafted as advisory — whose fix raised security and cost four tasks. The
+correction is published rather than the flattering earlier figure; see
+[`BENCHMARKS.md`](BENCHMARKS.md).
 
 **Why, and why determinism was not the problem.** Every bug fixed during that
 pass bought utility at *zero* security cost. Security fell only where a human
@@ -196,30 +198,45 @@ kept in the defaults because one code-heavy corpus is not grounds for weakening
 a default and because removing it breaks any contract that declares the kind —
 not because the rate is acceptable. See [`BENCHMARKS.md`](BENCHMARKS.md).
 
-### 4.2e Constructed values cannot be attributed, and paths are the common case
+### 4.2e Constructed values cannot be attributed — unless they decompose
 
 The principal writes *"brief.md in my notes folder"*; the tool takes
 `/srv/notes/brief.md`. The agent must **join** a name the principal gave to a
 root the server gave, and the result is a string neither of them ever emitted —
-so it traces to nobody and is denied, under every labelling.
+so it traces to nobody and is denied, under every labelling, the principal's own
+request included.
 
-This is the same shape as computed amounts (§4.2c), and worse in one respect:
-an amount can be bounded by a budget, and a path cannot. What rescues it in
-practice is that some tools return absolute paths (`search_files` does,
-`list_directory` does not), so an agent that discovers before it acts produces
-values the server really emitted. That is a property of the *server's* API, not
-of anything IDENSEC can guarantee.
+**`Policy.compose_paths` (ADR-0012) addresses this one case**, by attributing
+and authorising each *component* of a path rather than the whole string. It is
+off by default, refuses `..` outright rather than decomposing a traversal, and
+requires **every** component to stand up — an existential check would let an
+authorised root carry a leaf only an injection named, which is the attack.
+
+Its reach is exactly its grammar. A path splits into parts that mean something
+alone; an entity id does not, and *"open the oldest file"* names nothing to
+split. So this converts the case where the principal named a **component**, and
+nothing else. It does not generalise to §4.1.
+
+**It also inherits §4.2b per component, and that is the honest way to describe
+its weakness.** Ten attacks on the decomposition were tried; nine are refused by
+construction — absolute leaves, encoded traversals, dot segments, trees nobody
+disclosed. The tenth works: a principal who writes *"check the payroll
+numbers"* makes `payroll` a quotable leaf, so `/srv/notes/payroll` is admitted
+though they meant no such file. That is quotation-is-not-intent applied to a
+smaller unit, not a new failure — every component is attributed by the ordinary
+rules, so it carries the ordinary rules' limits, and `min_quotation_length` is
+the same mitigation it always was. **Directories are the exposed case**, because
+unlike files they rarely carry an extension to distinguish them from prose.
 
 There is also a bootstrap: every path-taking tool needs a path, so an agent
 cannot address a filesystem whose root it has not been told. The only way in is
 a zero-argument tool such as `list_allowed_directories`, which has nothing to
 attribute and therefore nothing to refuse. A containment design without such a
-tool cannot start at all.
+tool cannot start at all, and that is a fact about the server's API rather than
+about IDENSEC.
 
 Both found by running the proxy against a real MCP server rather than a
-benchmark — see [`BENCHMARKS.md`](BENCHMARKS.md). **No mechanism is proposed**;
-component-wise attribution of a joined path is the obvious candidate and is not
-built.
+benchmark — see [`BENCHMARKS.md`](BENCHMARKS.md).
 
 ### 4.2f A safety flag cannot be protected by role
 
@@ -298,7 +315,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | Latency figures | **Measured**, on a shared unpinned host; spread reported. |
 | Extraction coverage is adequate | **Measured** on a synthetic corpus: 93% recall, 0 false positives. Not measured against real traffic. |
 | Contract derivation is accurate | **Measured** on 25 hand-labelled schemas: 100% authority recall, 0 dangerous misses. Ground truth is our own. |
-| Task utility under enforcement | **Measured**: a surface over thirty configurations, from 96.6%/43.3% to 85.1%/77.3%. Best above 90% security: 91.6%/68.0%. Never both above 90/70. |
+| Task utility under enforcement | **Measured**: a surface over thirty configurations, from 96.7%/43.3% to 85.2%/74.2%. Best above 90% security: 91.8%/64.9%. Never both above 90/70. |
 | Literature comparisons | **Unverified** — search summaries, not primary sources. |
 | Anyone wants this | **Unvalidated.** No users, no customers, no pilot. Every business statement in this repository is hypothesis. |
 

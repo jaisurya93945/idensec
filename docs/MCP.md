@@ -122,12 +122,14 @@ with.
       "**.sender": ["email"],
       "**.participants[*]": ["email"],
       "**.events": ["referenced"],
-      "**.files": ["referenced"]
+      "**.files": ["referenced"],
+      "list_allowed_directories.**": ["posix_path"]
     }
   },
   "policy": "strict",
   "min_quotation_length": 3,
   "min_reference_word": 8,
+  "compose_paths": true,
   "contracts": "contracts/workspace.json",
   "task_file": "/run/idensec/task.txt",
   "audit": "idensec-audit.jsonl"
@@ -143,9 +145,14 @@ with.
 | `policy` | `strict` · `supervised` · `observe` |
 | `min_quotation_length` | Characters before quoting a value counts as evidence. Raising it closes low-entropy collisions (*"what are we doing on June 13"* authorising `delete_file(13)`) and refuses legitimate short values with them. |
 | `min_reference_word` | Characters before a lone quoted word counts as *naming* a record. Only matters where a path is granted `referenced`. |
+| `compose_paths` | Admit a path whose **components** are each attributed and authorised. Off by default. This is what lets you grant a server authority over its own root *only* — scoped to the tool that discloses it, e.g. `"list_allowed_directories.**"` — and still have the principal open a file they named, while an injection naming a different real file in the same directory is refused. See ADR-0012. |
 | `contracts` | Path to a contract file. Absent ⇒ every tool is unknown ⇒ denied. |
 | `task_file` | See above. Absent ⇒ no trusted corpus. |
 | `seal_tool_descriptions` | Defaults true. Turning it off opens the tool-poisoning path and is logged loudly at startup. |
+
+Results are recorded at `<tool>.result`, which is what makes a grant like
+`"list_allowed_directories.**"` possible: the server may name its own root and
+nothing else.
 
 Both numeric knobs trade security against utility, neither has a defensible
 universal value, and they interact — reference binding is meaningless below a

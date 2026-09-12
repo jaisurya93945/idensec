@@ -58,6 +58,25 @@ def _describing_text(record: Mapping[str, Any], limit: int = 24) -> list[str]:
     return found
 
 
+_KEY_FIELDS = ("id", "uuid", "key", "name", "slug")
+
+
+def _record_key(record: Mapping[str, Any]) -> str:
+    """The field of a record that identifies it, if it has an obvious one.
+
+    Checked in order, so ``id`` beats ``name`` when a record carries both. Only
+    scalars count: a nested object is not an identifier, and returning one would
+    record an entity under a key no tool could ever be passed.
+    """
+    for field in _KEY_FIELDS:
+        value = record.get(field)
+        if isinstance(value, str) and value:
+            return value
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+    return ""
+
+
 class SessionHalted(RuntimeError):
     """Raised by :meth:`Session.require` when the session has stopped."""
 
@@ -275,7 +294,37 @@ class Session:
                 )
                 for key, value in content.items()
             }
+        if isinstance(content, (int, float)) and not isinstance(content, bool):
+            # Numbers are data too, and an id that arrives as 7 rather than "7"
+            # is the same id. Dropping them meant every integer-keyed record was
+            # permanently unattributable -- which showed up as four banking
+            # tasks failing on `id=7` the moment a bare `id` parameter was
+            # correctly treated as authority-bearing.
+            #
+            # Indexed, never sealed: replacing a number with a handle would
+            # change the JSON type the agent has to send back, and attribution
+            # rather than sealing is what refuses an attacker-chosen value.
+            # Booleans are excluded because true and false identify nothing.
+            self.ledger.index(source, str(content), step=step, path=path)
+            return content
         if isinstance(content, (list, tuple)):
+            # A list of records is a directory too, and the commoner shape:
+            # {"events": {"5": {...}}} keys by id, but every JSON API that
+            # returns an array carries the id in an `id` field instead. Only the
+            # first shape was recognised, so reference binding never fired on an
+            # array -- which is most of them.
+            for item in content:
+                if isinstance(item, Mapping):
+                    key = _record_key(item)
+                    if key:
+                        self.ledger.record_entity(
+                            key,
+                            path,
+                            _describing_text(item),
+                            Origin(
+                                source.id, source.trust, source.sensitivity, step, path
+                            ),
+                        )
             walked = [
                 self._walk_observe(source, value, step, f"{path}[{i}]")
                 for i, value in enumerate(content)
@@ -566,16 +615,19 @@ class Session:
         """Attribute a value the model typed rather than referenced."""
         operand = self.ledger.lookup(kind, value)
         if operand is not None:
-            return self._bind_reference(
+            return self._or_composed(
                 value,
-                Attribution(
-                    state=AttributionState.ATTRIBUTED,
-                    origins=operand.origins,
-                    derivation="operand",
+                self._bind_reference(
+                    value,
+                    Attribution(
+                        state=AttributionState.ATTRIBUTED,
+                        origins=operand.origins,
+                        derivation="operand",
+                    ),
+                    collection,
                 ),
-                collection,
             )
-        return self._attribute_by_derivation(value, collection)
+        return self._or_composed(value, self._attribute_by_derivation(value, collection))
 
     def _bind_reference(
         self, value: str, attribution: Attribution, collection: str
@@ -610,16 +662,19 @@ class Session:
             )
         operand = self.ledger.find_value(text)
         if operand is not None:
-            return self._bind_reference(
+            return self._or_composed(
                 text,
-                Attribution(
-                    state=AttributionState.ATTRIBUTED,
-                    origins=operand.origins,
-                    derivation="operand",
+                self._bind_reference(
+                    text,
+                    Attribution(
+                        state=AttributionState.ATTRIBUTED,
+                        origins=operand.origins,
+                        derivation="operand",
+                    ),
+                    collection,
                 ),
-                collection,
             )
-        return self._attribute_by_derivation(text, collection)
+        return self._or_composed(text, self._attribute_by_derivation(text, collection))
 
     def _attribute_by_derivation(
         self, value: str, collection: str = ""
@@ -687,6 +742,89 @@ class Session:
             derivation="reference-bound",
             reference_bound=True,
         )
+
+    _PATH_KINDS = frozenset({"posix_path", "windows_path", "unc_path"})
+
+    def _or_composed(self, value: str, attribution: Attribution) -> Attribution:
+        """Fall back to composition when the whole value will not stand up.
+
+        Applied when attribution *fails* and, just as importantly, when it
+        succeeds but is **unauthorised**. That second case is the common one and
+        was missed by a first implementation: a path an agent read out of a
+        directory listing is perfectly attributable -- to a listing the source
+        is not authoritative for. Running composition only on the unattributed
+        path meant it never fired against a real server at all.
+        """
+        if not self.policy.compose_paths or attribution.composed:
+            # Checked first: classifying the value costs a pass over every
+            # registered kind's pattern, and this runs on every attributed leaf
+            # of every call. A deployment that has not opted in should pay
+            # nothing at all for the feature.
+            return attribution
+        kind = classify(value, self._kinds) or UNCLASSIFIED
+        if attribution.state is not AttributionState.UNATTRIBUTED and (
+            attribution.is_authorised_for(kind, self._sources)
+        ):
+            return attribution
+        return self._attribute_by_composition(value) or attribution
+
+    def _attribute_by_composition(self, value: str) -> Attribution | None:
+        """Admit a path the agent *built* out of parts it was given.
+
+        The principal names a file, the server names a root, and the agent joins
+        them into a string neither ever emitted. Whole-value attribution then
+        traces it to nobody and denies it -- the principal's own request
+        included. This is the only derivation in the system that looks *inside*
+        a value, and it is confined to paths because a path has a grammar: it
+        splits at separators into parts that mean something on their own, which
+        prose does not.
+
+        Every split is checked **universally**: prefix and remainder must each
+        be attributed to a source authorised for it. The rest of the system is
+        existential (ADR-0008) and that is right for a value with one origin;
+        here the prefix chooses the tree and the remainder chooses the file, so
+        an attacker supplying either half has chosen something.
+
+        Returns ``None`` when composition does not apply, so the caller falls
+        through to the ordinary answer.
+        """
+        if not self.policy.compose_paths or "/" not in value:
+            return None
+        if classify(value, self._kinds) not in self._PATH_KINDS:
+            return None
+        if ".." in value.split("/"):
+            # A prefix and a traversal can each be attributable while their join
+            # leaves the tree. Refused rather than decomposed.
+            return None
+        for index, character in enumerate(value):
+            if character != "/" or index == 0:
+                continue
+            prefix, remainder = value[:index], value[index + 1 :]
+            if not remainder:
+                continue
+            left = self._authorised_component(prefix)
+            if left is None:
+                continue
+            right = self._authorised_component(remainder)
+            if right is None:
+                continue
+            return Attribution(
+                state=AttributionState.ATTRIBUTED,
+                origins=merge_origins([*left.origins, *right.origins]),
+                derivation="composed",
+                composed=True,
+            )
+        return None
+
+    def _authorised_component(self, part: str) -> Attribution | None:
+        """Attribute one component and check it, or return ``None``."""
+        attribution = self._attribute_by_derivation(part)
+        if attribution.state is AttributionState.UNATTRIBUTED:
+            return None
+        kind = classify(part, self._kinds) or UNCLASSIFIED
+        if not attribution.is_authorised_for(kind, self._sources):
+            return None
+        return attribution
 
     def _payload_attributions(self, resolution: Resolution) -> list[Attribution]:
         """Payload leaves are not authority-checked, only sensitivity-tracked."""

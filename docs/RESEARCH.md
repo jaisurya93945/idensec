@@ -558,7 +558,7 @@ On the workspace suite -- the one that actually exercises entity selection -- it
 admits three previously-refused selections at **zero** security cost: 70.0% →
 77.5% utility, 100% security either way. In aggregate across four suites it is
 worth **two tasks out of ninety-seven**: the best configuration above 90%
-security moves from 91.6%/66.0% to 91.6%/68.0%. It does **not** clear the
+security moves from 91.8%/62.9% to 91.8%/64.9%. It does **not** clear the
 90%/70% bar this project set itself, and the permissive configurations still buy
 more utility for less security.
 
@@ -756,6 +756,116 @@ claiming it works.
 boolean may be strengthened but not weakened". Marking it `AUTHORITY` would deny
 every legitimate edit, because booleans are not attributable. Left advisory,
 with the gap written into the shipped contract where a reviewer will see it.
+
+---
+
+## Thread 3j — Composition: the boundary is about values (2026-09-12)
+
+`EXPERIMENT` — Thread 3i found that a path the agent *builds* -- a root the
+server disclosed joined to a name the principal wrote -- traces to nobody and is
+denied under every labelling, the principal's own request included. That entry
+recorded "no mechanism is proposed, because we do not have one". It was wrong,
+and the reason it was wrong is the interesting part.
+
+`INFERENCE` — **Entity ids have no internal structure. Paths do.** Reference
+binding (ADR-0011) had to reach outside the value -- to a directory of records
+and whether the principal named one. A path needs nothing outside itself: it
+splits at separators into parts that mean something alone. Attribute and
+authorise each part and the join is decided.
+
+`RESULT` — Built as `Policy.compose_paths`, off by default, and measured on the
+same real filesystem server with the same injection:
+
+| labelling | principal's read | injected overwrite | injected move |
+| --- | --- | --- | --- |
+| server authoritative for nothing | deny | deny | deny |
+| server authoritative for every path it returns | allow | **ALLOW** | deny |
+| server authoritative for its **root**, paths compose | **allow** | deny | deny |
+
+The third row is the first configuration that gets all three right.
+
+`INFERENCE` (**the one that matters**) — This qualifies a claim this repository
+has published since the AgentDojo results:
+
+> IDENSEC contains attacks that introduce a new destination. It does not contain
+> attacks that merely select among legitimate ones.
+
+That held because the **value was opaque**. It is a statement about identifiers
+lacking internal structure, not about intent being unknowable. Decompose the
+value and the boundary moves. So the honest reading of Threads 3e–3f is narrower
+than it looked: we had been describing a property of *provenance* when we were
+describing a property of the *values* we happened to be attributing.
+
+`FACT` — The check must be **universal**, where ADR-0008 makes the rest of the
+system existential. The prefix chooses the tree and the remainder chooses the
+file, so an attacker supplying either half has chosen something. An existential
+check would let an authorised root carry a leaf only an injection named -- which
+is the entire attack.
+
+`RESULT` — A first implementation ran composition only where attribution
+*failed*. Against a real server it therefore never fired at all: a path read out
+of a directory listing is perfectly attributable, to a listing the source is not
+authoritative for. The common case is attribution succeeding and being
+**unauthorised**, and that is now where it runs.
+
+`FACT` — It generalises no further than its grammar. *"Open the oldest file"*
+names nothing to split. An entity id does not split. What composition converts
+is the case where the principal named a **component**, which for filesystems is
+most of real work and for entity directories is none of it.
+
+`HYPOTHESIS` — URLs, ARNs and git remotes also decompose. Whether the same
+universal check is sound for them is **unmeasured**, and a wrong answer on a URL
+*host* is considerably worse than on a path segment, so it is on the roadmap
+rather than in the code.
+
+---
+
+## Thread 3k — A dangerous miss, found by a number moving (2026-09-12)
+
+`RESULT` — Re-running AgentDojo after the extraction and deriver changes moved
+the curve **down** on utility: the best configuration above 90% security went
+from 91.6%/68.0% to 91.8%/64.9%. Four banking tasks were lost.
+
+`FACT` — The cause, isolated by bisecting the commits: the deriver had been
+drafting a bare `id` parameter as **ADVISORY** — unchecked — whenever its schema
+said ``integer``. On AgentDojo's banking suite that is
+``update_scheduled_transaction(id, amount, recipient)``, where ``id`` decides
+which transaction a financial write lands on.
+
+    before:  id -> advisory        after:  id -> authority
+
+`INFERENCE` — This is a **dangerous miss** by the project's own definition, in
+the component whose entire purpose is not to make them, present since that
+component existed, through two milestones that reported its numbers approvingly.
+The utility it was buying was not utility; it was an unchecked authority
+parameter on a financial tool.
+
+`INFERENCE` — **It was found because a number moved in the wrong direction.** A
+project reporting a single headline figure would have been *improved* by leaving
+the hole in. That is the argument for publishing a curve rather than a score,
+and it only paid off once something regressed.
+
+`RESULT` — Two further gaps surfaced while tracking it down, both real and
+neither rewarded by this benchmark:
+
+* **Numeric leaves were never indexed.** ``{"id": 7}`` was dropped on the
+  observation walk, so an integer-keyed record was permanently unattributable.
+  Now indexed, never sealed -- a handle would change the JSON type the agent has
+  to send back. Booleans stay excluded: ``true`` identifies nothing.
+* **Only dict-keyed directories counted as entity records.**
+  ``{"events": {"5": {…}}}`` did; ``[{"id": 5, …}]`` did not, which is the shape
+  every JSON array returns, so reference binding had never fired on a list.
+
+`FACT` — Neither moved a benchmark number, because AgentDojo's grants do not
+cover the paths where they apply. Recorded because they were fixed, not because
+they paid.
+
+`INFERENCE` (**uncomfortable**) — Twelve defects in this component have now been
+found by measurement rather than by review, and the rate is not falling. A
+design whose correctness rests on that many separate judgements about what
+counts as authority has a correspondingly large surface for exactly this. That
+belongs in the argument *against* the approach, and is recorded in
+[`REVIEW.md`](REVIEW.md) as such.
 
 ---
 
