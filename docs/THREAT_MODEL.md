@@ -99,6 +99,21 @@ untrusted tool output. Descriptions are sealed like any other untrusted content.
 operand is not addressed here; containment limits what that behaviour can reach.
 *Test:* `TestToolPoisoning`.
 
+**A second surface on the same channel: tool *annotations*.** MCP tools carry
+`readOnlyHint`, `destructiveHint` and friends, and 51 of 52 tools across seven
+published servers use them ([`BENCHMARKS.md`](BENCHMARKS.md)). They are
+server-supplied, so a poisoned server can set them freely. A monitor that
+believed `readOnlyHint` would let an attacker disable its own confidentiality
+rules by declaring the exfiltration tool harmless — and **32 of those 52 tools
+already claim it**, so the check would fail silently on most real traffic.
+
+IDENSEC reads them under a direction test rather than a trust decision:
+*an annotation may add an effect and may never remove one.* Restrictive hints
+are believed because lying that way only denies the attacker's own tools;
+`readOnlyHint` is ignored outright. The rule generalises past MCP — it is the
+condition under which any attacker-controllable metadata is safe to read.
+*Test:* `TestAnnotationsAreReadOneWay`.
+
 ### T05 · Handle forgery, guessing and kind confusion
 
 *Attacker:* fabricates `[[idn:email:…]]`, guesses a live handle, or rewrites a

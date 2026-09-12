@@ -592,6 +592,62 @@ policy-sprawl objection in Thread 3e applies to it unchanged.
 
 ---
 
+## Thread 3g — MCP tool annotations, and the direction test (2026-09-12)
+
+`EXPERIMENT` — Captured `tools/list` from seven published MCP servers over
+stdio and drafted contracts from the real schemas. 52 tools, 94 parameters.
+Corpus checked in at `benchmarks/data/mcp_tools.json`; method and caveats in
+[`BENCHMARKS.md`](BENCHMARKS.md).
+
+`FACT` — **MCP carries an effect signal after all, and 51 of 52 tools use it.**
+Tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+`openWorldHint`) are near-universal in these servers. This project has said
+since ADR-0004 that "effects cannot be read off a schema", which remains true of
+the *schema* — but the protocol carries them next to it, and we were not
+looking.
+
+`FACT` — They are supplied by the **server**, which is `TOOL_DESCRIPTION`, the
+bottom of the integrity lattice. The same channel this project already seals for
+tool poisoning.
+
+`INFERENCE` — The resolution is a **direction test**, not a trust decision, and
+it generalises beyond MCP: *attacker-controllable metadata may be read whenever
+believing it can only restrict.*
+
+* `destructiveHint: true`, `openWorldHint: true` → believed. A hostile server
+  lying this way denies its own tools and achieves nothing.
+* `readOnlyHint: true` → **ignored**. Believing it is a total bypass: mark the
+  exfiltration tool read-only and every confidentiality rule stops firing.
+
+`RESULT` — **32 of 52 real tools claim `readOnlyHint: true`.** A monitor that
+believed the hint would have disabled its own egress checks on 62% of this
+corpus on day one. That is what makes the direction test load-bearing rather
+than pedantic.
+
+`RESULT` — Believing only the restrictive hints completed **8 of 52 drafts**
+that would otherwise have carried no effects at all. A small, free improvement
+in the only direction that is safe.
+
+`RESULT` — Four defects, none findable from a corpus we wrote: a `TypeError` on
+JSON Schema union types; camelCase invisible to every hint match; the linter
+reporting the `unclassified` pseudo-kind as a typo at ERROR severity on 23 of 94
+parameters; and `branchId` drafting the collection `**.branchs`, which matches
+nothing.
+
+`RESULT` (**uncomfortable**) — Reference binding's collection draft fires on
+**2 of 60** authority-bearing parameters here. Published servers name things
+`path`, `repo_path` and `branch_name`, not `<noun>_id`. The mechanism was
+designed and measured against AgentDojo, whose environments are keyed
+dictionaries; the servers people deploy are not shaped that way. ADR-0011 is
+qualified accordingly rather than quietly left alone.
+
+`FACT` — Seven reference and first-party servers is not a representative
+sample. The interesting case — a server written to a deadline by someone who
+never read the annotations spec — is absent, and the direction test is precisely
+what makes that absence survivable.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

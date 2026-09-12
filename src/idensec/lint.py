@@ -25,10 +25,26 @@ from enum import IntEnum
 from typing import Any
 
 from .contracts import ContractRegistry, Effect, ParameterContract, Role, ToolContract
-from .kinds import KIND_REGISTRY, REFERENCED
+from .kinds import KIND_REGISTRY, REFERENCED, UNCLASSIFIED
 from .labels import Source, path_covers
 
 __all__ = ["Diagnostic", "Severity", "lint_contract", "lint_registry", "lint_sources"]
+
+
+_PSEUDO_KINDS = frozenset({UNCLASSIFIED, REFERENCED})
+"""Kind names that are real declarations but have no extraction pattern.
+
+Neither is in ``KIND_REGISTRY``, because neither is matched by scanning text:
+``unclassified`` is what a value gets when nothing matches, and ``referenced``
+is decided by whether the principal named a record. Treating them as typos made
+the linter report an ERROR on 23 of the 94 parameters in a corpus of real MCP
+schemas -- a quarter of an operator's first run, all wrong, on the checks that
+exist to be trusted.
+"""
+
+
+def _is_known_kind(kind: str) -> bool:
+    return kind in KIND_REGISTRY or kind in _PSEUDO_KINDS
 
 
 class Severity(IntEnum):
@@ -250,7 +266,7 @@ def _lint_parameter(
             )
         )
 
-    unknown = sorted(k for k in spec.kinds if k not in KIND_REGISTRY)
+    unknown = sorted(k for k in spec.kinds if not _is_known_kind(k))
     if unknown:
         found.append(
             Diagnostic(
@@ -337,7 +353,7 @@ def lint_sources(
                     )
                 )
         for kind in sorted(source.authoritative_for):
-            if kind not in KIND_REGISTRY:
+            if not _is_known_kind(kind):
                 found.append(
                     Diagnostic(
                         Severity.ERROR,

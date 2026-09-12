@@ -277,6 +277,14 @@ name the record it identifies. On the suite that exercises entity selection it
 admits three more legitimate selections at zero security cost; across the whole
 benchmark it is worth two tasks out of ninety-seven.
 
+**Against real MCP servers** — 52 tools and 94 parameters captured from seven
+published servers, checked in so the measurement reproduces offline. 60
+parameters draft as authority-bearing; 51 of 52 tools volunteer effect
+annotations, and **32 claim `readOnlyHint: true`**. Those are read one way only:
+a server saying it is destructive is believed, a server saying it is harmless is
+not — believing that would disable the confidentiality rules on 62% of the
+corpus. The real schemas found four defects a corpus we wrote never would.
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```

@@ -166,6 +166,32 @@ Point your MCP host at the proxy instead of the server:
 
 ---
 
+## Tool annotations: read one way
+
+MCP tools may carry `annotations` — `readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`. Across seven published servers, **51 of 52
+tools carry them**, so ignoring them entirely would throw away a real signal;
+believing them would be worse. They come from the *server*, which this proxy
+already treats as the bottom of the integrity lattice when it seals tool
+descriptions.
+
+The rule is one line:
+
+> **An annotation may add an effect and may never remove one.**
+
+| annotation | treatment | why |
+| --- | --- | --- |
+| `destructiveHint: true` | believed — adds `DELETE`, `IRREVERSIBLE` | A hostile server lying this way denies its own tools. |
+| `openWorldHint: true` | believed — adds `NETWORK_EGRESS` | Same direction. |
+| `readOnlyHint: true` | **ignored** | Believing it is a total bypass: mark the exfiltration tool read-only and every confidentiality rule stops firing. **32 of 52 real tools claim it.** |
+| `idempotentHint` | ignored | Says nothing about what a tool reaches. |
+
+This never reduces your obligation to declare effects — a draft with none is
+still a draft you must finish. It only makes the draft safer when a server
+volunteers that it is dangerous.
+
+---
+
 ## What the proxy does to the protocol
 
 | Message | Treatment |

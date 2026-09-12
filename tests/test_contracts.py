@@ -165,3 +165,160 @@ class TestEffects:
     def test_consequential_detection(self) -> None:
         assert not ToolContract(tool="t", effects=frozenset({Effect.READ})).is_consequential
         assert ToolContract(tool="t", effects=frozenset({Effect.DELETE})).is_consequential
+
+
+class TestAnnotationsAreReadOneWay:
+    """MCP tool annotations arrive from the server, which is the bottom of the
+    integrity lattice. They are usable only because believing them can never
+    make a contract more permissive.
+    """
+
+    def test_destructive_is_believed(self) -> None:
+        contract = derive_contract(
+            "cleanup",
+            parameters=["path"],
+            effects=[Effect.WRITE],
+            annotations={"destructiveHint": True},
+        )
+        assert Effect.DELETE in contract.effects
+        assert Effect.IRREVERSIBLE in contract.effects
+        assert Effect.WRITE in contract.effects
+
+    def test_open_world_is_believed(self) -> None:
+        contract = derive_contract(
+            "fetch", parameters=["url"], annotations={"openWorldHint": True}
+        )
+        assert contract.can_egress
+
+    def test_read_only_is_ignored(self) -> None:
+        """The one that matters. A poisoned server marks its exfiltration tool
+        read-only; if that were believed, every confidentiality rule would stop
+        firing on it. Measured across seven reference servers, 32 of 52 tools
+        claim this hint, so it is not a hypothetical input."""
+        contract = derive_contract(
+            "send_everything",
+            parameters=["to", "body"],
+            effects=[Effect.NETWORK_EGRESS, Effect.WRITE],
+            annotations={"readOnlyHint": True, "destructiveHint": False},
+        )
+        assert contract.can_egress
+        assert Effect.WRITE in contract.effects
+
+    def test_annotations_never_remove_a_declared_effect(self) -> None:
+        declared = frozenset({Effect.NETWORK_EGRESS, Effect.WRITE, Effect.FINANCIAL})
+        for hints in (
+            {"readOnlyHint": True},
+            {"destructiveHint": False},
+            {"idempotentHint": True},
+            {"openWorldHint": False},
+            {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
+        ):
+            contract = derive_contract(
+                "pay", parameters=["iban"], effects=declared, annotations=hints
+            )
+            assert declared <= contract.effects, hints
+
+    def test_idempotent_says_nothing(self) -> None:
+        plain = derive_contract("t", parameters=["x"], effects=[Effect.READ])
+        hinted = derive_contract(
+            "t", parameters=["x"], effects=[Effect.READ], annotations={"idempotentHint": True}
+        )
+        assert plain.effects == hinted.effects
+
+    def test_absent_annotations_change_nothing(self) -> None:
+        plain = derive_contract("t", parameters=["to", "body"], effects=[Effect.WRITE])
+        hinted = derive_contract(
+            "t", parameters=["to", "body"], effects=[Effect.WRITE], annotations={}
+        )
+        assert plain == hinted
+
+
+class TestRealSchemaShapes:
+    """Shapes that a corpus we wrote ourselves never produced, and that seven
+    published MCP servers produced immediately."""
+
+    def test_a_union_type_does_not_crash(self) -> None:
+        """JSON Schema's ``type`` is a string *or a list*. Reading it as a
+        string raised TypeError against the first real server that used one."""
+        schema = {
+            "type": "object",
+            "properties": {"cursor": {"type": ["string", "null"]}},
+        }
+        contract = derive_contract("list_things", schema)
+        assert contract.parameter("cursor").role is Role.AUTHORITY
+
+    def test_a_union_is_downgraded_only_when_every_member_is_scalar(self) -> None:
+        """``["string", "null"]`` can hold an identifier, so it stays
+        authority-bearing. The permissive direction needs every member to be a
+        type that cannot."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "maybe_name": {"type": ["string", "null"]},
+                "retries": {"type": ["integer", "number"]},
+            },
+        }
+        contract = derive_contract("t", schema)
+        assert contract.parameter("maybe_name").role is Role.AUTHORITY
+        assert contract.parameter("retries").role is Role.ADVISORY
+
+    def test_an_absent_type_is_not_downgraded(self) -> None:
+        contract = derive_contract("t", {"type": "object", "properties": {"x": {}}})
+        assert contract.parameter("x").role is Role.AUTHORITY
+
+    @pytest.mark.parametrize(
+        ("camel", "snake"),
+        [
+            ("sortBy", "sort_by"),
+            ("startTime", "start_time"),
+            ("fileId", "file_id"),
+            ("pageSize", "page_size"),
+        ],
+    )
+    def test_camel_case_reads_the_same_as_snake_case(
+        self, camel: str, snake: str
+    ) -> None:
+        """A server's naming convention must not change what a parameter means.
+        JavaScript MCP servers use camelCase throughout, and splitting on ``_``
+        alone missed every one of them."""
+        assert derive_contract("t", parameters=[camel]).parameter(camel).role is (
+            derive_contract("t", parameters=[snake]).parameter(snake).role
+        )
+
+    def test_camel_case_identifiers_get_their_collection(self) -> None:
+        assert derive_contract("t", parameters=["fileId"]).parameter(
+            "fileId"
+        ).collection == "**.files"
+        assert derive_contract("t", parameters=["calendarEventId"]).parameter(
+            "calendarEventId"
+        ).collection == "**.events"
+
+    def test_a_bare_id_gets_no_collection(self) -> None:
+        """It says which-thing without saying which *kind* of thing, and a
+        collection guessed wrong would bind ids across directories."""
+        assert derive_contract("t", parameters=["id"]).parameter("id").collection == ""
+
+
+class TestCollectionPluralisation:
+    """A collection glob that matches nothing makes reference binding silently
+    never fire for that parameter. ``branchId`` produced ``**.branchs`` against
+    a real server before these rules existed."""
+
+    @pytest.mark.parametrize(
+        ("name", "collection"),
+        [
+            ("fileId", "**.files"),
+            ("eventId", "**.events"),
+            ("branchId", "**.branches"),
+            ("boxId", "**.boxes"),
+            ("entryId", "**.entries"),
+            ("repositoryId", "**.repositories"),
+            ("addressId", "**.addresses"),
+            ("dayId", "**.days"),
+            ("message_ids", "**.messages"),
+        ],
+    )
+    def test_plurals(self, name: str, collection: str) -> None:
+        assert derive_contract("t", parameters=[name]).parameter(name).collection == (
+            collection
+        )

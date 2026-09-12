@@ -21,7 +21,8 @@ additional engineering makes the project more true.
 | `next` | **Selection by property** | The residue of entity selection after reference binding: "cheapest", "oldest", "most recent" quote nothing about any record. No candidate mechanism yet, and inventing one to have an answer would be worse than recording the gap. |
 | `blocked` | **Re-verify the literature against primary sources.** | Every comparative claim is still `INFERENCE` from search summaries. Nothing comparative is published outside this repository, and the AgentDojo numbers are deliberately *not* placed beside CaMeL's or PACT's, which measure a different quantity. |
 | `done` | **Extraction coverage study** (synthetic corpus) | 69% → 93% recall at zero false positives; six new kinds, three broadened patterns. Priced the `ipv4` trade-off rather than guessing it. [`BENCHMARKS.md`](BENCHMARKS.md). |
-| `next` | **Coverage against *real* MCP traffic** | The synthetic corpus measures our patterns against our own expectations. Partially addressed: the proxy now runs against the reference `mcp-server-time`, and AgentDojo supplied four real-shaped environments. |
+| `done` | **Contract drafting against real MCP *schemas*** | 52 tools and 94 parameters captured from seven published servers, checked in so it reproduces offline. Found four defects a corpus we wrote never would, and priced the review burden at 60 authority parameters across seven servers. [`BENCHMARKS.md`](BENCHMARKS.md). |
+| `next` | **Coverage against real MCP tool *output*** | Schemas are now real; responses are not. What fraction of authority-bearing values in real MCP results the extractor recognises is still unmeasured, and it is the number that prices sealing. |
 | `done` | **Contract derivation precision/recall** | 25 hand-labelled schemas: authority recall 95.2% → **100%**, dangerous misses 2 → **0**. Both misses were real deriver bugs, now regression-tested and gated in CI. [`BENCHMARKS.md`](BENCHMARKS.md). |
 
 ## Next: make it deployable
@@ -30,7 +31,7 @@ additional engineering makes the project more true.
 | --- | --- | --- |
 | `done` | **MCP proxy** | Built: stdio transport, both boundaries, contract drafting, observe mode, audit to JSONL. 19 end-to-end tests against a hostile server over real pipes. See [`MCP.md`](MCP.md). Surfaced a protocol-level finding — MCP has no trusted channel for principal intent ([`RESEARCH.md`](RESEARCH.md) Thread 3b). |
 | `done` | **Contract linter** | Built: 11 checks over contracts and source grants, three severities, JSON output, and the same checks run at proxy startup. Dogfooded in CI against our own shipped contracts. |
-| `next` | **A seeded contract corpus** for common MCP servers, versioned and reviewable. | The one candidate moat that grows with adoption ([`COMPETITORS.md`](COMPETITORS.md) §4). |
+| `next` | **A seeded contract corpus** for common MCP servers, versioned and reviewable. | The one candidate moat that grows with adoption ([`COMPETITORS.md`](COMPETITORS.md) §4). Drafts for seven servers now exist as a by-product of the schema corpus; what is missing is the *effects*, which is the part no deriver can supply. |
 | `next` | **Streamable HTTP transport** for the proxy | Same interception points as stdio; the remaining half of MCP deployments. |
 | `next` | **Propose a principal-intent field to the MCP spec** | The concrete standards contribution this project can make, and a prerequisite for *any* containment design deploying cleanly over MCP. |
 | `later` | **Framework adapters** — agent SDK tool hooks, LangGraph. | Lower leverage than MCP; each is a separate integration surface. |

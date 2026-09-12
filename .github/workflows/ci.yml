@@ -86,6 +86,25 @@ jobs:
       - name: Benchmarks run
         run: python benchmarks/bench_monitor.py --quick
 
+      - name: Contract drafting survives real MCP schemas
+        # Replays tools/list captured from seven published servers. It runs
+        # offline from the checked-in corpus, and exists because every defect
+        # it has ever found was invisible to a corpus we wrote ourselves.
+        run: |
+          python benchmarks/mcp_corpus.py --json mcp.json
+          python - <<'PY'
+          import json, sys
+          data = json.load(open("mcp.json"))
+          if data["totals"]["tools"] < 40:
+              sys.exit("corpus shrank; a capture probably failed")
+          spurious = data["lint"].get("unknown-operand-kind", 0)
+          if spurious:
+              sys.exit(f"{spurious} parameters reported as unregistered kinds")
+          claims = data["annotations"].get("readOnlyHint=True", 0)
+          print(f"{data['totals']['tools']} tools drafted; "
+                f"{claims} claim readOnlyHint, none believed")
+          PY
+
       - name: Extraction coverage does not regress
         # Coverage is a security parameter; a pattern change that silently
         # drops recall should fail the build, not surface months later.

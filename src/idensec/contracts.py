@@ -25,6 +25,7 @@ unknown tool has no contract and the monitor refuses it.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -441,6 +442,38 @@ def _kinds_for(name: str) -> frozenset[str]:
     return frozenset()
 
 
+_WIDENING_ANNOTATIONS: Mapping[str, frozenset[Effect]] = {
+    "destructiveHint": frozenset({Effect.DELETE, Effect.IRREVERSIBLE}),
+    "openWorldHint": frozenset({Effect.NETWORK_EGRESS}),
+}
+"""MCP tool annotations this deriver is willing to believe, and what they add.
+
+The rule is one line and it is the whole of the security argument:
+**an annotation may add an effect and may never remove one.**
+
+MCP tool annotations are supplied by the *server*, which sits at the bottom of
+the integrity lattice (``TOOL_DESCRIPTION``) precisely because a server can be
+hostile or compromised. So each hint is judged by which direction believing it
+moves the decision:
+
+* ``destructiveHint: true`` and ``openWorldHint: true`` make the contract more
+  restrictive. A hostile server that lies this way causes denials of its own
+  tools and nothing else.
+* ``readOnlyHint: true`` makes it **less** restrictive, and is therefore
+  ignored outright. Believing it is a total bypass: mark the exfiltration tool
+  read-only and every confidentiality rule stops firing. Measured across seven
+  reference MCP servers, **32 of 52 tools claim it** -- see
+  ``benchmarks/mcp_corpus.py``, which is why this is a live concern rather than
+  a hypothetical one.
+* ``idempotentHint`` says nothing about what a tool reaches, so nothing is read
+  from it.
+
+The asymmetry means annotations can only ever *improve* a draft's safety, never
+weaken it, which is what makes reading attacker-controllable metadata defensible
+at all.
+"""
+
+
 def derive_contract(
     tool: str,
     schema: Mapping[str, Any] | None = None,
@@ -448,6 +481,7 @@ def derive_contract(
     parameters: Sequence[str] | None = None,
     effects: Iterable[Effect | str] = (),
     description: str = "",
+    annotations: Mapping[str, Any] | None = None,
 ) -> ToolContract:
     """Produce a **draft** contract from a JSON Schema or a parameter list.
 
@@ -464,6 +498,13 @@ def derive_contract(
     ``effects`` is **not** inferred. A tool's effects cannot be read off its
     schema, and silently guessing that something is read-only would be the most
     dangerous inference in the whole system. The caller must state them.
+
+    ``annotations`` takes an MCP tool's own ``annotations`` object, and is read
+    under the one-way rule in :data:`_WIDENING_ANNOTATIONS`: it may **add**
+    effects to what the caller declared and may never remove any. A server
+    claiming to be destructive is believed; a server claiming to be read-only is
+    not. It therefore never reduces the caller's obligation to declare effects,
+    only makes the draft safer when a server volunteers that it is dangerous.
     """
     names: list[str] = []
     props: Mapping[str, Any] = {}
@@ -474,24 +515,28 @@ def derive_contract(
         names = list(parameters)
 
     declared_effects = frozenset(Effect(e) for e in effects)
+    for hint, added in _WIDENING_ANNOTATIONS.items():
+        if annotations is not None and annotations.get(hint) is True:
+            declared_effects |= added
     read_only = bool(declared_effects) and declared_effects <= {Effect.READ}
 
     declared: dict[str, ParameterContract] = {}
     for name in names:
         lowered = name.lower()
         prop = props.get(name, {}) if isinstance(props, Mapping) else {}
-        if lowered.endswith(_IDENTIFIER_SUFFIXES):
+        tokens = _name_tokens(name)
+        if lowered.endswith(_IDENTIFIER_SUFFIXES) or (
+            tokens and f"_{tokens[-1]}" in _IDENTIFIER_SUFFIXES
+        ):
             # Checked first: an identifier suffix outranks every content hint.
             role = Role.AUTHORITY
         elif read_only and any(
-            hint == lowered or hint in lowered.split("_") for hint in _FILTER_HINTS
+            hint == lowered or hint in tokens for hint in _FILTER_HINTS
         ):
             role = Role.PAYLOAD
         elif lowered in _DANGEROUS_FLAGS:
             role = Role.AUTHORITY
-        elif any(
-            hint == lowered or hint in lowered.split("_") for hint in _ADVISORY_HINTS
-        ):
+        elif any(hint == lowered or hint in tokens for hint in _ADVISORY_HINTS):
             # Token-wise, not exact. ``new_start_time`` is the same parameter as
             # ``start_time`` with a prefix, and enumerating every prefix a server
             # might use is a losing game -- AgentDojo alone supplied
@@ -500,9 +545,9 @@ def derive_contract(
             # it, and the identifier-suffix branch above still wins, so
             # ``order_id`` and ``start_url`` stay AUTHORITY.
             role = Role.ADVISORY
-        elif any(hint == lowered or hint in lowered.split("_") for hint in _PAYLOAD_HINTS):
+        elif any(hint == lowered or hint in tokens for hint in _PAYLOAD_HINTS):
             role = Role.PAYLOAD
-        elif isinstance(prop, Mapping) and prop.get("type") in {"boolean", "integer", "number"}:
+        elif _only_scalar_types(prop):
             # Numerics and booleans cannot hold an identifier, but an amount
             # very much carries authority, so only the rest are downgraded.
             role = Role.ADVISORY if not _looks_like_amount(lowered) else Role.AUTHORITY
@@ -525,10 +570,56 @@ def derive_contract(
     )
 
 
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
+def _name_tokens(name: str) -> list[str]:
+    """Split a parameter name the way its author meant it to be read.
+
+    ``snake_case`` **and** ``camelCase``. Measured against seven published MCP
+    servers, splitting on ``_`` alone missed every JavaScript server's naming
+    convention: ``sortBy`` stayed AUTHORITY where ``sort_by`` was advisory, and
+    ``fileId`` missed the identifier suffix that ``file_id`` matched. The
+    convention a server happens to use should not change what a parameter is
+    taken to mean.
+    """
+    spaced = _CAMEL_BOUNDARY.sub(" ", name).replace("_", " ").replace("-", " ")
+    return [token for token in spaced.lower().split() if token]
+
+
+_NON_IDENTIFIER_TYPES = frozenset({"boolean", "integer", "number"})
+
+
+def _only_scalar_types(prop: object) -> bool:
+    """True when a schema's declared type cannot possibly hold an identifier.
+
+    JSON Schema's ``type`` is a string **or a list of strings**, and real
+    servers use the list form -- ``["string", "null"]`` for an optional field.
+    Reading it as a string crashed the deriver against the first published
+    server that used one, which is the sort of thing a corpus we wrote
+    ourselves was never going to find.
+
+    A union is only safe to downgrade when *every* member is a type that cannot
+    carry an identifier; ``["string", "null"]`` can, so it stays AUTHORITY. An
+    absent or unrecognised ``type`` is treated the same way, because the
+    downgrade is the permissive direction.
+    """
+    if not isinstance(prop, Mapping):
+        return False
+    declared = prop.get("type")
+    if isinstance(declared, str):
+        declared = [declared]
+    if not isinstance(declared, (list, tuple)) or not declared:
+        return False
+    return all(
+        isinstance(item, str) and item in _NON_IDENTIFIER_TYPES for item in declared
+    )
+
+
 def _collection_for(name: str) -> str:
     """Draft which directory an ``<thing>_id`` parameter addresses.
 
-    ``file_id`` addresses files, ``event_id`` events, ``message_ids`` messages.
+    ``file_id`` addresses files, ``eventId`` events, ``message_ids`` messages.
     The draft is a glob over observed field paths, so it matches wherever the
     server actually puts that directory (``cloud_drive.files``, ``files``).
 
@@ -537,16 +628,45 @@ def _collection_for(name: str) -> str:
     collection only ever *narrows* which named records can bind an id, and a
     parameter with no draft binds nothing at all. ``id`` on its own gets
     nothing, because it says which-thing without saying which *kind* of thing.
+
+    It fires on **none** of the 60 authority-bearing parameters in
+    ``benchmarks/data/mcp_tools.json``: published servers name things ``path``,
+    ``repo_path`` and ``branch_name``, not ``<noun>_id``. Against those servers
+    every collection has to be written by hand, or reference binding never runs
+    at all. That is reported in ``docs/BENCHMARKS.md`` rather than smoothed over.
     """
-    lowered = name.lower()
-    for suffix in ("_ids", "_id"):
-        if lowered.endswith(suffix) and len(lowered) > len(suffix):
-            noun = lowered[: -len(suffix)].rsplit("_", 1)[-1]
-            if not noun:
-                return ""
-            plural = noun if noun.endswith("s") else f"{noun}s"
-            return f"**.{plural}"
-    return ""
+    tokens = _name_tokens(name)
+    if len(tokens) < 2 or tokens[-1] not in ("id", "ids"):
+        return ""
+    noun = tokens[-2]
+    if not noun:
+        return ""
+    return f"**.{_plural(noun)}"
+
+
+_SIBILANT_ENDINGS = ("s", "x", "z", "ch", "sh")
+_VOWELS = frozenset("aeiou")
+
+
+def _plural(noun: str) -> str:
+    """English plural of a directory noun, for the collection glob.
+
+    Naive ``+ "s"`` produced ``**.branchs`` from ``branchId`` against a real
+    server, and a collection glob that matches nothing makes reference binding
+    silently never fire for that parameter -- a denial rather than a bypass, but
+    a confusing one. Three rules cover the directory nouns servers actually use;
+    anything stranger is why the draft is a draft.
+    """
+    if noun.endswith("ss"):
+        # "address" is singular and ends in s; "files" is already plural. The
+        # doubled s is the only cheap way to tell them apart, and getting it
+        # wrong costs a denial rather than a bypass.
+        return f"{noun}es"
+    if noun.endswith(_SIBILANT_ENDINGS):
+        return noun if noun.endswith("s") else f"{noun}es"
+    if noun.endswith("y") and len(noun) > 1 and noun[-2] not in _VOWELS:
+        return f"{noun[:-1]}ies"
+    return f"{noun}s"
 
 
 def _looks_like_amount(name: str) -> bool:

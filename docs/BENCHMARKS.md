@@ -438,6 +438,127 @@ to fix the previous six:
 
 ---
 
+## MCP schemas we did not write (2026-09-12)
+
+Every earlier measurement of the deriver used a corpus **we authored** —
+schemas modelled on real servers, labelled by us — and this file has said so
+since the corpus existed. This one uses `tools/list` output captured over stdio
+from seven published MCP servers, checked in at
+[`benchmarks/data/mcp_tools.json`](../benchmarks/data/mcp_tools.json) so it
+reproduces without network access:
+
+```
+python3 benchmarks/mcp_corpus.py            # replay the captured corpus
+python3 benchmarks/mcp_corpus.py --capture  # re-probe the live servers
+```
+
+**52 tools, 94 parameters**, from `everything`, `filesystem`, `memory`,
+`sequential-thinking`, `time`, `git` and `fetch`.
+
+**What this measures.** The *schemas* are not ours, so the shapes, naming
+conventions and annotation habits are real. The *labels* are still ours —
+nobody publishes ground truth for which MCP parameters bear authority — so this
+is **not** an accuracy measurement and is not reported as one. It measures
+review burden, coverage and linter yield on real inputs.
+
+| server | tools | params | authority | with a kind | annotated |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| everything | 13 | 16 | 6 | 0 | 13 |
+| filesystem | 14 | 25 | 18 | 11 | 14 |
+| git | 12 | 28 | 21 | 12 | 12 |
+| memory | 9 | 8 | 8 | 0 | 9 |
+| sequential | 1 | 9 | 6 | 0 | 1 |
+| time | 2 | 4 | 0 | 0 | 2 |
+| fetch | 1 | 4 | 1 | 1 | 0 |
+| **total** | **52** | **94** | **60** | **24** | **51** |
+
+**64% of parameters are drafted `AUTHORITY`, and only 40% of those carry a kind
+the extractor recognises.** The other 36 fall to the fail-closed path where the
+whole value must be attributed. That is the review burden, stated in the units
+an operator actually faces: sixty parameters to check across seven servers.
+
+### MCP servers volunteer effect hints, and 62% of them claim to be harmless
+
+51 of 52 tools carry an `annotations` object. What they claim:
+
+| hint | count | what we do with it |
+| --- | ---: | --- |
+| `readOnlyHint: true` | **32** | **ignored** |
+| `readOnlyHint: false` | 19 | ignored |
+| `destructiveHint: true` | 7 | believed → adds `DELETE`, `IRREVERSIBLE` |
+| `destructiveHint: false` | 34 | ignored |
+| `openWorldHint: true` | 1 | believed → adds `NETWORK_EGRESS` |
+| `openWorldHint: false` | 50 | ignored |
+| `idempotentHint` | 41 | says nothing about what a tool reaches |
+
+**The rule is one line: an annotation may add an effect and may never remove
+one.** Annotations arrive from the server, which sits at the *bottom* of the
+integrity lattice — the same channel as the tool descriptions this project
+seals, and for the same reason. So each hint is judged by direction:
+
+> A server claiming to be **destructive** is believed, because a hostile server
+> lying that way only denies its own tools. A server claiming to be
+> **read-only** is ignored, because believing it is a total bypass: mark the
+> exfiltration tool read-only and every confidentiality rule stops firing.
+
+Thirty-two real tools make exactly that claim today, which is what moves this
+from a hypothetical to a live concern. The asymmetry is asserted in
+`TestAnnotationsAreReadOneWay`, including a case that checks no combination of
+hints can remove a declared effect.
+
+The believed hints completed **8 of 52 drafts** that would otherwise have had
+no effects at all — every one in the restrictive direction. The remaining 44
+`no-effects-declared` findings are correct and are the point: effects are the
+one thing the deriver refuses to infer.
+
+### Four defects the real schemas found
+
+None would have been found by a corpus we wrote, because we do not write
+schemas like these:
+
+1. **`"type": ["string", "null"]` crashed the deriver.** JSON Schema's `type` is
+   a string *or a list*; reading it as a string raised `TypeError` on the first
+   server that used a union. Unions are now downgraded only when *every* member
+   is a type that cannot hold an identifier.
+2. **camelCase was invisible.** Hints were matched by splitting on `_` only, so
+   `sortBy` stayed `AUTHORITY` while `sort_by` was advisory, and `fileId` missed
+   the identifier suffix that `file_id` matched. Every JavaScript server in the
+   corpus names parameters this way.
+3. **The linter reported `unclassified` as a typo.** It is a pseudo-kind with no
+   extraction pattern, so it is absent from `KIND_REGISTRY` by design — and the
+   linter called it an unregistered kind at `ERROR` severity on **23 of 94**
+   parameters. A quarter of an operator's first run, all wrong, on the checks
+   that exist to be trusted.
+4. **`branchId` drafted the collection `**.branchs`.** A glob that matches
+   nothing makes reference binding silently never fire for that parameter.
+
+### What this says about reference binding
+
+The collection draft fires on **2 of 60** authority-bearing parameters, and only
+after the camelCase fix. Published servers name things `path`, `repo_path`,
+`branch_name` and `source` — not `<noun>_id`. Against these servers an operator
+must hand-author every `collection`, or reference binding never runs at all.
+
+That is a real qualification of [ADR-0011](DESIGN_DECISIONS.md) and it is worth
+stating plainly: the mechanism was measured on AgentDojo, whose environments are
+keyed dictionaries with `_id` parameters, and the servers people actually deploy
+do not look like that.
+
+### What this does not show
+
+- **Not accuracy.** The labels are ours. Independent ground truth for MCP
+  parameter roles does not exist, and inventing it here would measure our
+  judgement against itself.
+- **Not coverage of tool *output*.** This is schemas only. What fraction of
+  authority-bearing values in real MCP *responses* the extractor recognises is
+  still unmeasured, and is still the gap listed below.
+- **Not a representative sample.** Seven servers, all reference or
+  first-party implementations. Servers written against a deadline by people who
+  have never read the MCP annotations spec are the interesting case, and are
+  not here.
+
+---
+
 ## Method notes
 
 - One untimed warm-up call per measurement, so lazily compiled regexes and

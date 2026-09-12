@@ -262,16 +262,26 @@ class Proxy:
     def _draft(self, name: str, tool: dict[str, Any]) -> None:
         """Derive a starting contract from a tool's advertised schema.
 
-        A draft, never an authority. Effects are left empty on purpose -- they
-        cannot be read off a schema, and guessing that a tool is read-only
-        would be the most dangerous inference in the system. A draft with no
-        effects is one an operator must complete before it means anything.
+        A draft, never an authority. Effects are not read off the schema -- they
+        cannot be, and guessing that a tool is read-only would be the most
+        dangerous inference in the system. A draft with no effects is one an
+        operator must complete before it means anything.
+
+        The server's own ``annotations`` are passed through, and are read under
+        the one-way rule in ``contracts._WIDENING_ANNOTATIONS``: a server saying
+        it is destructive or open-world is believed, because believing it only
+        ever restricts; a server saying it is read-only is ignored, because
+        believing *that* would let a poisoned server mark its exfiltration tool
+        safe. The annotations arrive over the same channel as the tool
+        descriptions this proxy seals, and are treated with the same suspicion.
         """
         schema = tool.get("inputSchema")
+        annotations = tool.get("annotations")
         contract = derive_contract(
             name,
             schema if isinstance(schema, dict) else None,
             description=str(tool.get("description", ""))[:200],
+            annotations=annotations if isinstance(annotations, dict) else None,
         )
         self._drafts[name] = contract.to_dict()
 

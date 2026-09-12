@@ -27,7 +27,7 @@ from idensec.contracts import (
     Role,
     ToolContract,
 )
-from idensec.kinds import REFERENCED
+from idensec.kinds import REFERENCED, UNCLASSIFIED
 from idensec.labels import Source, Trust
 from idensec.lint import Severity, lint_contract, lint_registry, lint_sources, render
 
@@ -375,3 +375,59 @@ class TestInertReferenceGrant:
         )
         codes = {d.code for d in lint_registry(registry, self._sources())}
         assert "inert-reference-grant" not in codes
+
+
+class TestPseudoKindsAreNotTypos:
+    """`unclassified` and `referenced` are real declarations with no extraction
+    pattern, so they are absent from KIND_REGISTRY by design. Reporting them as
+    unregistered made the linter cry wolf on a quarter of a real MCP corpus,
+    which is how a linter stops being run at all.
+    """
+
+    @pytest.mark.parametrize("kind", [UNCLASSIFIED, REFERENCED])
+    def test_a_parameter_may_declare_one(self, kind: str) -> None:
+        contract = ToolContract(
+            tool="delete_file",
+            parameters={
+                "file_id": ParameterContract(
+                    "file_id", Role.AUTHORITY, frozenset({kind})
+                )
+            },
+            effects=frozenset({Effect.DELETE}),
+        )
+        codes = {d.code for d in lint_contract(contract)}
+        assert "unknown-operand-kind" not in codes
+
+    @pytest.mark.parametrize("kind", [UNCLASSIFIED, REFERENCED])
+    def test_a_source_may_be_granted_one(self, kind: str) -> None:
+        registry = ContractRegistry(
+            [
+                ToolContract(
+                    tool="delete_file",
+                    parameters={
+                        "file_id": ParameterContract(
+                            "file_id",
+                            Role.AUTHORITY,
+                            frozenset({kind}),
+                            collection="**.files",
+                        )
+                    },
+                    effects=frozenset({Effect.DELETE}),
+                )
+            ]
+        )
+        sources = [
+            Source("principal", Trust.USER_INPUT),
+            Source("ws", Trust.TOOL_UNTRUSTED, authoritative_for=frozenset({kind})),
+        ]
+        codes = {d.code for d in lint_registry(registry, sources)}
+        assert "unknown-operand-kind" not in codes
+
+    def test_a_real_typo_is_still_caught(self) -> None:
+        contract = ToolContract(
+            tool="send",
+            parameters={"to": ParameterContract("to", Role.AUTHORITY, frozenset({"emial"}))},
+            effects=frozenset({Effect.NETWORK_EGRESS}),
+        )
+        codes = {d.code for d in lint_contract(contract)}
+        assert "unknown-operand-kind" in codes
