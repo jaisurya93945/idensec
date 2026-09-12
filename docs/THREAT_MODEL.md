@@ -232,6 +232,30 @@ gap explicitly).
 
 ---
 
+### Asserted as a property, not a case list
+
+The threats above are each pinned by a named test. One property covers the space
+*between* them:
+
+> **Observing content from a source authoritative for nothing never turns a
+> denial into an admission** — under every combination of reference binding,
+> path composition, spend budgets and the quotation floor, in either order, and
+> including an attacker who writes out the exact arguments the agent is about to
+> send.
+
+That last clause is the realistic attack. Random poison rarely collides with the
+value a call carries; an injection names it deliberately. Fuzzed over four
+configurations in `tests/test_fuzz.py`, where roughly 80% of generated calls are
+denied before poisoning — so the property has a population to guard — and
+mutation-checked by granting the attacker source authority, which makes it fail
+as it should.
+
+What is deliberately **not** asserted: a source the operator granted authority
+*may* turn a denial into an admission. That is what a grant is for, and it is
+the exchange rate [`BENCHMARKS.md`](BENCHMARKS.md) measures rather than a bug.
+
+---
+
 ## Unmitigated
 
 These are listed because they are real, not because we intend to leave them.

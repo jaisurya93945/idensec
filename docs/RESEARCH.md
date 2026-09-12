@@ -869,6 +869,40 @@ belongs in the argument *against* the approach, and is recorded in
 
 ---
 
+## Thread 3l — Testing the interaction, not the mechanisms (2026-09-12)
+
+`FACT` — The previous review entry named the strongest criticism of this design:
+twelve defects found by measurement rather than review, at a rate that is not
+falling, in a system whose correctness rests on many separate judgements about
+what counts as authority. The obvious untested surface is what happens when the
+mechanisms are **combined**. Sealing, the quotation floor, reference binding,
+path composition and spend budgets had each been measured alone.
+
+`EXPERIMENT` — Stated the anti-injection property directly and fuzzed it:
+
+> Observing content from a source authoritative for **nothing** never turns a
+> denial into an admission.
+
+Over four configurations (bare, composition, reference binding, everything
+enabled), in both orders, and with a variant where the attacker writes out the
+*exact* arguments the agent is about to send -- which is what an injection
+actually does, and what random poison almost never reproduces.
+
+`RESULT` — **It holds.** No combination admitted anything the components refused
+individually. Roughly 80% of generated calls are denied before poisoning, so the
+property has a real population to guard rather than passing vacuously.
+
+`FACT` — The property is **mutation-checked**: granting the attacker source
+authority makes it fail in 24 generated cases. A property test that cannot fail
+is a comment, and this one was verified to be neither.
+
+`INFERENCE` — This is reassurance about interaction, and it should not be read
+as more. It says the mechanisms do not *combine* into a hole; it says nothing
+about whether each is individually right, which is where all twelve defects
+lived. The criticism in [`REVIEW.md`](REVIEW.md) stands unaltered.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the
