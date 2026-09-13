@@ -145,6 +145,7 @@ with.
 | `policy` | `strict` · `supervised` · `observe` |
 | `min_quotation_length` | Characters before quoting a value counts as evidence. Raising it closes low-entropy collisions (*"what are we doing on June 13"* authorising `delete_file(13)`) and refuses legitimate short values with them. |
 | `min_reference_word` | Characters before a lone quoted word counts as *naming* a record. Only matters where a path is granted `referenced`. |
+| `contracts` → `payload_paths` | Field-path globs *inside* an authority-bearing parameter whose leaves are content. Needed wherever one parameter carries both the thing being addressed and the thing being written — `create_entities([{name, observations}])` is the canonical case. Without it you must choose between denying every legitimate write and attributing nothing, and `idensec.lint` will tell you which you chose. |
 | `compose_paths` | Admit a path whose **components** are each attributed and authorised. Off by default. This is what lets you grant a server authority over its own root *only* — scoped to the tool that discloses it, e.g. `"list_allowed_directories.**"` — and still have the principal open a file they named, while an injection naming a different real file in the same directory is refused. See ADR-0012. |
 | `contracts` | Path to a contract file. Absent ⇒ every tool is unknown ⇒ denied. |
 | `task_file` | See above. Absent ⇒ no trusted corpus. |

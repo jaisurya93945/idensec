@@ -306,6 +306,15 @@ and all three calls come out right:
 python3 examples/mcp/attack_filesystem.py
 ```
 
+**Reference binding, against a real knowledge-graph server** — an injection
+planted in an *observation* on a legitimate entity. Only the narrow labelling
+admits the entity the principal **described** and refuses the one only the
+injection **named**:
+
+```
+python3 examples/mcp/attack_memory.py
+```
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```

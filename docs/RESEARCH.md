@@ -903,6 +903,58 @@ lived. The criticism in [`REVIEW.md`](REVIEW.md) stands unaltered.
 
 ---
 
+## Thread 3m — Reference binding meets real software (2026-09-13)
+
+`EXPERIMENT` — Reference binding (ADR-0011) had been measured only on
+AgentDojo. Ran it against an unmodified ``@modelcontextprotocol/server-memory``
+-- a knowledge graph keyed by entity name -- behind the real proxy, with the
+injection planted in an **observation** attached to a legitimate entity.
+``examples/mcp/attack_memory.py``.
+
+`RESULT` — **It works, and only after two gaps were fixed that the benchmark
+could not have shown.**
+
+| | `strict` | `names` | `referenced` |
+| --- | --- | --- | --- |
+| entity the principal **named** | allow | allow | allow |
+| entity the principal **described** | deny | allow | allow |
+| entity only the **injection** named | deny | **ALLOW** | deny |
+
+`FACT` — The first row needs no mechanism at all: a name the principal wrote is
+a quotation of the instruction. Worth recording because it is the case people
+assume needs a grant and does not, and it means a narrow labelling is less
+costly than it looks.
+
+`RESULT` — **Records describe themselves in lists.** ``_describing_text`` read
+scalar fields only, so on this server reference binding saw a name and a type
+and never fired. Observations, tags, aliases and labels are how records describe
+themselves; AgentDojo's use scalar fields throughout, so the benchmark was
+structurally incapable of exposing this.
+
+`RESULT` — **A parameter is not always one thing.** ``create_entities(entities)``
+takes ``[{name, entityType, observations}]``: the name decides which record the
+write lands on, the observations are the note. Whole-parameter AUTHORITY denies
+every legitimate call; PAYLOAD attributes nothing. ``idensec.lint`` reported
+``no-authority-parameter`` **against our own shipped contract**, and was right.
+Closed with ``ParameterContract.payload_paths`` -- field-path globs inside a
+parameter, exemptions named one at a time so that forgetting one costs a denial
+rather than a bypass.
+
+`INFERENCE` — That split is what lets provenance address **memory poisoning** at
+all, which [`THREAT_MODEL.md`](THREAT_MODEL.md) had listed as out of scope. The
+injection lived in an observation on a real entity; the defence works only
+because the entity *name* and the observation *text* are separate fields with
+separate roles. It is not a general answer to memory poisoning -- nothing stops
+an attacker planting a record -- but the selection of *which* record to act on
+is now checked.
+
+`FACT` — **Neither fix moved the AgentDojo curve, at any labelling.** Two real
+gaps, invisible to the measurement this project leans on hardest. That is the
+third consecutive milestone where running against software we did not write
+found something a benchmark could not.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

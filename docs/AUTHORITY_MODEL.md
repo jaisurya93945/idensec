@@ -191,6 +191,20 @@ summary is untrusted and flows into `body`; the recipient is authoritative and
 fills `to`. An invocation-granularity monitor cannot express this, which is the
 granularity mismatch the design exists to fix.
 
+**Role is per parameter, and sometimes a parameter is not one thing.** A real
+knowledge-graph server takes `create_entities([{name, entityType, observations}])`
+— the name decides which record the write lands on, the observations are the
+note being written. `ParameterContract.payload_paths` names field-path globs
+inside a parameter whose leaves are content:
+
+```python
+ParameterContract("entities", Role.AUTHORITY, payload_paths=("**.observations",))
+```
+
+The parameter stays `AUTHORITY` and exemptions are named one at a time, so a
+forgotten exemption costs a denial. The reverse arrangement — `PAYLOAD` with
+authority exceptions — would make a forgotten one a silent bypass.
+
 ---
 
 ## 7. Effects

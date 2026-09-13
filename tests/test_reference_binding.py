@@ -474,3 +474,116 @@ class TestWhatItDoesNotSolve:
         session.observe("principal", f"Summarise the note that starts {long_body[:60]}")
         session.observe("ws", {"files": {"13": {"content": long_body}}})
         assert not session.admit("delete_file", {"file_id": "13"}).allowed
+
+
+class TestRecordsDescribeThemselvesInLists:
+    """Found against a real knowledge-graph server, not against a benchmark.
+
+    `_describing_text` read scalar fields only, so a record whose descriptive
+    text lives in `observations`, `tags` or `aliases` offered nothing to bind
+    against -- and on that server every descriptive field was a list, so
+    reference binding never fired at all.
+    """
+
+    def _session(self, ids, task: str) -> Session:
+        session = Session(
+            contracts=[RESCHEDULE, DELETE_FILE],
+            policy=Policy(
+                denial_budget=-1, min_quotation_length=3, min_reference_word=4
+            ),
+            sources=[
+                Source("principal", Trust.USER_INPUT),
+                Source(
+                    "ws",
+                    Trust.TOOL_UNTRUSTED,
+                    authoritative_paths={"**.files": frozenset({REFERENCED})},
+                ),
+            ],
+            id_factory=ids,
+        )
+        session.observe("principal", task)
+        session.observe(
+            "ws",
+            {
+                "files": [
+                    {
+                        "id": "2026",
+                        "name": "vendor-contract-2026",
+                        "observations": ["Signed with Northwind on 2026-02-01."],
+                    },
+                    {
+                        "id": "2031",
+                        "name": "payroll-archive",
+                        "observations": ["Retained for seven years."],
+                    },
+                ]
+            },
+        )
+        return session
+
+    def test_a_phrase_from_a_list_field_binds_the_record(self, ids) -> None:
+        """`id` keys the record, so that is what the tool is passed -- and the
+        phrase that binds it comes out of `observations`."""
+        session = self._session(ids, "Delete the contract we signed with Northwind")
+        assert session.admit("delete_file", {"file_id": "2026"}).allowed
+
+    def test_a_record_no_list_field_matches_is_not_bound(self, ids) -> None:
+        session = self._session(ids, "Delete the contract we signed with Northwind")
+        assert not session.admit("delete_file", {"file_id": "2031"}).allowed
+
+    def test_a_record_with_no_id_is_keyed_by_name(self, ids) -> None:
+        """Which is the shape a real knowledge-graph server uses: entities have
+        a name and no id at all."""
+        session = Session(
+            contracts=[DELETE_FILE],
+            policy=Policy(
+                denial_budget=-1, min_quotation_length=3, min_reference_word=4
+            ),
+            sources=[
+                Source("principal", Trust.USER_INPUT),
+                Source(
+                    "ws",
+                    Trust.TOOL_UNTRUSTED,
+                    authoritative_paths={"**.files": frozenset({REFERENCED})},
+                ),
+            ],
+            id_factory=ids,
+        )
+        session.observe("principal", "Delete the contract we signed with Northwind")
+        session.observe(
+            "ws",
+            {
+                "files": [
+                    {
+                        "name": "vendor-contract-2026",
+                        "observations": ["Signed with Northwind on 2026-02-01."],
+                    },
+                    {"name": "payroll-archive", "observations": ["Retained."]},
+                ]
+            },
+        )
+        assert session.admit("delete_file", {"file_id": "vendor-contract-2026"}).allowed
+        assert not session.admit("delete_file", {"file_id": "payroll-archive"}).allowed
+
+    def test_a_long_list_item_still_does_not_bind(self, ids) -> None:
+        """The rule that keeps this sound is unchanged: a record's body is where
+        injections live, so only *short* strings count, in a list or out of it."""
+        session = Session(
+            contracts=[DELETE_FILE],
+            policy=Policy(denial_budget=-1, min_quotation_length=3),
+            sources=[
+                Source("principal", Trust.USER_INPUT),
+                Source(
+                    "ws",
+                    Trust.TOOL_UNTRUSTED,
+                    authoritative_paths={"**.files": frozenset({REFERENCED})},
+                ),
+            ],
+            id_factory=ids,
+        )
+        body = "lorem ipsum dolor sit amet " * 8
+        session.observe("principal", f"Summarise the note that starts {body[:60]}")
+        session.observe(
+            "ws", {"files": [{"name": "planted", "observations": [body]}]}
+        )
+        assert not session.admit("delete_file", {"file_id": "planted"}).allowed

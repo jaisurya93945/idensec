@@ -120,7 +120,11 @@ Two residual attacks, stated rather than closed:
 - **Confusion.** An attacker who can *create* a record and guess the principal's
   phrasing can make their record the one named. Strictly harder than the attack
   reference binding replaces — it needs write access *and* a correct guess — but
-  real.
+  real, and **wider than it first looked**: a record's descriptive text includes
+  short strings inside lists (`observations`, `tags`, `aliases`), so an attacker
+  who can add observations to their own record gets many cheap attempts at
+  matching how the principal is likely to speak. They still cannot make the
+  principal quote anything, which is what keeps this sound rather than safe.
 - **Over-binding.** A principal whose instruction happens to contain a two-word
   phrase from an unintended record binds that record too. Raising
   `Policy.min_reference_word` narrows lone-word matches; nothing narrows phrase
@@ -300,6 +304,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | **Audit is integrity, not authenticity** | A hash chain proves the log was not altered. It does not prove IDENSEC wrote it. An attacker with write access can rewrite the chain from genesis; ship records off-host if that is in your threat model. |
 | **MCP needs an out-of-band task channel** | The protocol has nowhere to carry the principal's instruction, and the agent cannot be asked for it without creating a total bypass. The proxy reads it from a host-written file; a host that cannot provide one gets no trusted corpus and should run in observe mode rather than claim enforcement. See [`MCP.md`](MCP.md). |
 | **stdio transport only** | The proxy does not yet speak streamable HTTP. Framework adapters are roadmap, not code. |
+| **A parameter whose sub-fields have different roles must say so** | `create_entities(entities)` takes `[{name, entityType, observations}]`: the name is authority, the note is content. `ParameterContract.payload_paths` names the exemptions, one at a time, on a parameter that stays `AUTHORITY`. Forgetting one costs a denial; the opposite arrangement would make forgetting one a bypass. It is another per-API declaration, and `idensec.lint` reports a writing tool where nothing bears authority. |
 | **Reference binding needs a collection per parameter, and real servers do not supply one** | `ParameterContract.collection` says which directory an id addresses. `derive_contract` drafts it from `<noun>_id` names — which fires on **2 of 60** authority parameters across seven published MCP servers, because they name things `path`, `repo_path` and `branch_name`. Against those servers every collection is hand-authored or reference binding never runs. A wrong draft costs a denial; an absent one makes the grant inert, which `idensec.lint` reports. |
 | **Effect hints are read from the server, one way only** | MCP tool annotations come from the bottom of the integrity lattice. Hints that *restrict* (`destructiveHint`, `openWorldHint`) are believed; `readOnlyHint` is ignored, because believing it would disable the confidentiality rules — and 32 of 52 real tools claim it. This never reduces the operator's obligation to declare effects. |
 

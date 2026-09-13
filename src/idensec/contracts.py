@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from .kinds import UNCLASSIFIED
+from .labels import path_covers
 
 __all__ = [
     "ContractRegistry",
@@ -110,11 +111,41 @@ class ParameterContract:
     naming a calendar event authorise deleting an unrelated file -- the
     mechanism's own escape, found by running it.
     """
+    payload_paths: tuple[str, ...] = ()
+    """Field paths *inside* this parameter whose leaves are content, not authority.
+
+    A parameter is not always one thing. ``create_entities(entities)`` on a real
+    knowledge-graph server takes
+    ``[{"name": …, "entityType": …, "observations": [ … ]}]``: the **name**
+    decides which record the write lands on, and the **observations** are the
+    note being written. Marking the whole parameter ``AUTHORITY`` denies every
+    legitimate call, because a summary the model composed is attributable to
+    nobody; marking it ``PAYLOAD`` attributes nothing at all, which the linter
+    reports as ``no-authority-parameter`` on a writing tool -- and was right to.
+
+    Each entry is a field-path glob matched against the leaf's path within the
+    parameter, so ``"**.observations"`` exempts the note and leaves the name
+    checked. Patterns use the same syntax as ``Source.authoritative_paths``.
+
+    The direction is deliberate: the parameter stays ``AUTHORITY`` and
+    exemptions are named one at a time. Forgetting one costs a denial; the
+    opposite arrangement would make forgetting one a silent bypass.
+    """
     description: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "kinds", _as_frozenset(self.kinds))
         object.__setattr__(self, "role", Role(str(self.role)))
+        object.__setattr__(
+            self, "payload_paths", tuple(str(p) for p in self.payload_paths)
+        )
+
+    def is_payload_leaf(self, leaf_path: str) -> bool:
+        """True when a leaf inside this parameter is content rather than authority."""
+        if not self.payload_paths:
+            return False
+        candidate = leaf_path.lstrip(".")
+        return any(path_covers(pattern, candidate) for pattern in self.payload_paths)
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"role": self.role.value}
@@ -122,6 +153,8 @@ class ParameterContract:
             out["kinds"] = sorted(self.kinds)
         if self.collection:
             out["collection"] = self.collection
+        if self.payload_paths:
+            out["payload_paths"] = list(self.payload_paths)
         if self.description:
             out["description"] = self.description
         return out
@@ -191,6 +224,7 @@ class ToolContract:
                 role=Role(spec["role"]),
                 kinds=frozenset(spec.get("kinds", ())),
                 collection=spec.get("collection", ""),
+                payload_paths=tuple(spec.get("payload_paths", ())),
                 description=spec.get("description", ""),
             )
             for name, spec in data.get("parameters", {}).items()

@@ -89,6 +89,12 @@ jobs:
         # if the strict labelling ever admits an injected call.
         run: python examples/mcp/attack_filesystem.py
 
+      - name: Reference binding against a real MCP server
+        # server-memory, a graph keyed by entity name, with the injection in an
+        # observation. Fails if an injected delete gets through, or if the
+        # narrow labelling cannot do the ordinary work.
+        run: python examples/mcp/attack_memory.py
+
       - name: Benchmarks run
         run: python benchmarks/bench_monitor.py --quick
 

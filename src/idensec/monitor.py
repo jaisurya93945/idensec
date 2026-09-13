@@ -40,22 +40,47 @@ from .policy import STRICT, Disposition, Policy
 __all__ = ["Session", "SessionHalted"]
 
 
+_DESCRIBING_CHARS = 120
+
+
 def _describing_text(record: Mapping[str, Any], limit: int = 24) -> list[str]:
-    """The short string fields of a record: what a person would call it by.
+    """The short fields of a record: what a person would call it by.
 
     Long text is skipped deliberately. A record's *body* or *description* is
     where injections live, so quoting one must not bind a reference -- only the
     short, name-like fields count.
+
+    **Lists of short strings count too**, which a first version missed. Records
+    describe themselves through ``observations``, ``tags``, ``aliases`` and
+    ``labels`` as often as through scalar fields, and against a real
+    knowledge-graph server every descriptive field was in a list -- so reference
+    binding saw a record's name and its type and nothing else, and never fired.
+
+    The extra surface is the one already recorded in ``docs/LIMITATIONS.md``:
+    whoever wrote those strings chose them, so an attacker who can add
+    observations to *their* record can try to make it match how the principal is
+    likely to speak. They cannot make the principal quote anything, which is
+    what keeps this sound rather than safe.
     """
     found: list[str] = []
-    for value in record.values():
-        if isinstance(value, str) and 0 < len(value) <= 120:
+
+    def take(value: Any) -> None:
+        if isinstance(value, str) and 0 < len(value) <= _DESCRIBING_CHARS:
             found.append(value)
         elif isinstance(value, (int, float)) and not isinstance(value, bool):
             found.append(str(value))
+
+    for value in record.values():
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                take(item)
+                if len(found) >= limit:
+                    break
+        else:
+            take(value)
         if len(found) >= limit:
             break
-    return found
+    return found[:limit]
 
 
 _KEY_FIELDS = ("id", "uuid", "key", "name", "slug")
@@ -403,7 +428,9 @@ class Session:
                 if parameter.role is Role.ADVISORY:
                     continue
 
-                if parameter.role is Role.PAYLOAD:
+                if parameter.role is Role.PAYLOAD or parameter.is_payload_leaf(
+                    leaf_path
+                ):
                     for attribution in self._payload_attributions(resolution):
                         sensitivity = max(sensitivity, attribution.sensitivity)
                     continue

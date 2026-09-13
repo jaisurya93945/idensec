@@ -1,0 +1,203 @@
+{
+  "schema": "idensec.contracts/v1",
+  "_comment": [
+    "Contracts for @modelcontextprotocol/server-memory, covering all 9 tools.",
+    "Drafted with derive_contract() from the server's own schemas and completed",
+    "by a human.",
+    "",
+    "This server is a knowledge graph keyed by entity NAME, which makes it the",
+    "natural test of reference binding against real software: the agent reads",
+    "names out of the graph and passes them straight back to delete_entities.",
+    "A name pulled from a directory looks identical whether the principal chose",
+    "it or an injection did.",
+    "",
+    "What a human supplied, because the deriver could not:",
+    "  - every effect. delete_* are DELETE and IRREVERSIBLE; the graph has no",
+    "    undo. create_* and add_observations are WRITE but not irreversible,",
+    "    because they add rather than replace.",
+    "  - `collection` on every parameter carrying an entity name.",
+    "    derive_contract drafts collections from <noun>_id names only, and this",
+    "    server calls them entityNames, names, relations and deletions -- so it",
+    "    drafted nothing and reference binding would never have fired. That is",
+    "    the per-API cost this project prices rather than denies.",
+    "  - `payload_paths` on every parameter that mixes the two. `entities` is",
+    "    [{name, entityType, observations}]: the NAME decides which record a",
+    "    write lands on, the OBSERVATIONS are the note being written. Marking",
+    "    the whole parameter authority denies every legitimate call, because a",
+    "    summary the model composed is attributable to nobody; marking it",
+    "    payload attributes nothing, which idensec.lint reported as",
+    "    no-authority-parameter on a writing tool -- and was right to.",
+    "  - `query` downgraded to payload: a search string on a read-only tool is",
+    "    not a choice of what to act on."
+  ],
+  "contracts": [
+    {
+      "tool": "read_graph",
+      "version": 1,
+      "effects": [
+        "read"
+      ],
+      "default_role": "authority",
+      "parameters": {}
+    },
+    {
+      "tool": "search_nodes",
+      "version": 1,
+      "effects": [
+        "read"
+      ],
+      "default_role": "authority",
+      "parameters": {
+        "query": {
+          "role": "payload"
+        }
+      }
+    },
+    {
+      "tool": "open_nodes",
+      "version": 1,
+      "effects": [
+        "read"
+      ],
+      "default_role": "authority",
+      "parameters": {
+        "names": {
+          "role": "authority",
+          "kinds": [
+            "unclassified",
+            "email"
+          ],
+          "collection": "**.entities"
+        }
+      }
+    },
+    {
+      "tool": "create_entities",
+      "version": 1,
+      "effects": [
+        "write"
+      ],
+      "default_role": "authority",
+      "parameters": {
+        "entities": {
+          "role": "authority",
+          "kinds": [
+            "unclassified",
+            "email"
+          ],
+          "collection": "**.entities",
+          "payload_paths": [
+            "**.observations",
+            "**.entityType"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "create_relations",
+      "version": 1,
+      "effects": [
+        "write"
+      ],
+      "default_role": "authority",
+      "parameters": {
+        "relations": {
+          "role": "authority",
+          "kinds": [
+            "unclassified",
+            "email"
+          ],
+          "collection": "**.entities",
+          "payload_paths": [
+            "**.relationType"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_observations",
+      "version": 1,
+      "effects": [
+        "write"
+      ],
+      "default_role": "authority",
+      "parameters": {
+        "observations": {
+          "role": "authority",
+          "kinds": [
+            "unclassified",
+            "email"
+          ],
+          "collection": "**.entities",
+          "payload_paths": [
+            "**.contents"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "delete_entities",
+      "version": 1,
+      "effects": [
+        "delete",
+        "irreversible"
+      ],
+      "default_role": "authority",
+      "description": "Removes entities and every relation touching them.",
+      "parameters": {
+        "entityNames": {
+          "role": "authority",
+          "kinds": [
+            "unclassified",
+            "email"
+          ],
+          "collection": "**.entities"
+        }
+      }
+    },
+    {
+      "tool": "delete_observations",
+      "version": 1,
+      "effects": [
+        "delete",
+        "irreversible"
+      ],
+      "default_role": "authority",
+      "parameters": {
+        "deletions": {
+          "role": "authority",
+          "kinds": [
+            "unclassified",
+            "email"
+          ],
+          "collection": "**.entities",
+          "payload_paths": [
+            "**.observations"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "delete_relations",
+      "version": 1,
+      "effects": [
+        "delete",
+        "irreversible"
+      ],
+      "default_role": "authority",
+      "parameters": {
+        "relations": {
+          "role": "authority",
+          "kinds": [
+            "unclassified",
+            "email"
+          ],
+          "collection": "**.entities",
+          "payload_paths": [
+            "**.relationType"
+          ]
+        }
+      }
+    }
+  ]
+}
