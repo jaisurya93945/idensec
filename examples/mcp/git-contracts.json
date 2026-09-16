@@ -1,0 +1,155 @@
+{
+  "schema": "idensec.contracts/v1",
+  "_comment": [
+    "Contracts for mcp-server-git, covering all 12 tools. Drafted with",
+    "derive_contract() from the server's own schemas and completed by a human.",
+    "",
+    "This is the case the project's own hypothesis cares most about: a coding",
+    "agent on a repository it did not write. The injection vector is the working",
+    "tree -- a comment in a source file the agent reads through git_diff.",
+    "",
+    "What a human supplied:",
+    "  - every effect. git_commit is IRREVERSIBLE because it publishes; git_reset",
+    "    is DELETE because it discards staged work; git_checkout is WRITE because",
+    "    it rewrites the working tree.",
+    "  - posix_path kinds on `files`, which the deriver left open.",
+    "  - `message` as payload. A commit message is content the model composes,",
+    "    and requiring it to be attributable would deny every commit.",
+    "",
+    "KNOWN GAP, left in deliberately: git_reset's only authority-bearing",
+    "parameter is repo_path, which names WHICH repository and not WHAT is",
+    "discarded. Provenance can check the former and has nothing to say about the",
+    "latter. That is limitation U05 on real software, and no role assignment",
+    "fixes it -- the tool takes no argument describing its blast radius. An",
+    "operator who cares should escalate it, not relabel it."
+  ],
+  "contracts": [
+    {
+      "tool": "git_status",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
+      }
+    },
+    {
+      "tool": "git_diff_unstaged",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "context_lines": {"role": "advisory"}
+      }
+    },
+    {
+      "tool": "git_diff_staged",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "context_lines": {"role": "advisory"}
+      }
+    },
+    {
+      "tool": "git_diff",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "target": {"role": "authority", "kinds": ["unclassified"]},
+        "context_lines": {"role": "advisory"}
+      }
+    },
+    {
+      "tool": "git_log",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "max_count": {"role": "advisory"},
+        "start_timestamp": {"role": "advisory"},
+        "end_timestamp": {"role": "advisory"}
+      }
+    },
+    {
+      "tool": "git_show",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "revision": {"role": "authority", "kinds": ["unclassified"]}
+      }
+    },
+    {
+      "tool": "git_branch",
+      "version": 1,
+      "effects": ["read"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "branch_type": {"role": "advisory"},
+        "contains": {"role": "payload"},
+        "not_contains": {"role": "payload"}
+      }
+    },
+    {
+      "tool": "git_add",
+      "version": 1,
+      "effects": ["write"],
+      "default_role": "authority",
+      "description": "Stages files. `files` decides what enters the commit.",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "files": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
+      }
+    },
+    {
+      "tool": "git_commit",
+      "version": 1,
+      "effects": ["write", "irreversible"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "message": {"role": "payload"}
+      }
+    },
+    {
+      "tool": "git_reset",
+      "version": 1,
+      "effects": ["write", "delete", "irreversible"],
+      "default_role": "authority",
+      "description": "Unstages everything. Nothing in its arguments says what.",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]}
+      }
+    },
+    {
+      "tool": "git_create_branch",
+      "version": 1,
+      "effects": ["write"],
+      "default_role": "authority",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "branch_name": {"role": "authority", "kinds": ["unclassified"]},
+        "base_branch": {"role": "authority", "kinds": ["unclassified"]}
+      }
+    },
+    {
+      "tool": "git_checkout",
+      "version": 1,
+      "effects": ["write"],
+      "default_role": "authority",
+      "description": "Rewrites the working tree; uncommitted work can be lost.",
+      "parameters": {
+        "repo_path": {"role": "authority", "kinds": ["posix_path", "unclassified"]},
+        "branch_name": {"role": "authority", "kinds": ["unclassified"]}
+      }
+    }
+  ]
+}

@@ -13,7 +13,7 @@ provenance model; there is no separate chain object, no delegation token, and no
 chain-verification step.
 
 This is a deliberate reduction, and it is the direct consequence of
-[ADR-0001](DESIGN_DECISIONS.md#adr-0001): the founding hypothesis was a
+[ADR-0001](DESIGN_DECISIONS.md#adr-0001--do-not-build-a-delegated-authority-authorization-platform): the founding hypothesis was a
 delegated-authority engine with an explicit `Human → Principal → Agent →
 Sub-agent → Tool → Resource` chain. That market is converged and contested, and
 more importantly the chain turns out not to be where the security content lives.

@@ -63,6 +63,26 @@ returning real data, and an uncontracted tool refused. First contact with
 software we did not write also produced two linter false positives, both since
 fixed; see [`RESEARCH.md`](RESEARCH.md) Thread 3d.
 
+Three servers have since been driven through a full injection scenario, each
+with a reviewed contract file in [`../examples/mcp/`](../examples/mcp):
+
+| Server | Tools contracted | Attack | Example |
+| --- | --- | --- | --- |
+| `@modelcontextprotocol/server-filesystem` | 14 | injected overwrite and move, from an HTML comment in a document | `attack_filesystem.py` |
+| `@modelcontextprotocol/server-memory` | 9 | injected delete, from an observation on a legitimate entity | `attack_memory.py` |
+| `mcp-server-git` | 12 | exfiltration by commit, from a comment in a source file | `attack_git.py` |
+
+Each one found something the benchmark could not, and each is listed in
+[`BENCHMARKS.md`](BENCHMARKS.md) with the labellings that fail as well as the
+ones that work.
+
+**`mcp-server-git` has no zero-argument tool.** All twelve of its tools take
+`repo_path`, so an agent that was not told where the checkout is cannot ask, and
+under the unattributed rule its first call is denied. If you deploy the proxy in
+front of it, the checkout path must appear in `task_file` — the host has to name
+it, because the protocol gives the agent no way to discover it. See
+[`LIMITATIONS.md`](LIMITATIONS.md) §4.2e.
+
 ## Quick start
 
 **1. Draft contracts from the server's own schemas.** This is the answer to
@@ -153,7 +173,21 @@ with.
 
 Results are recorded at `<tool>.result`, which is what makes a grant like
 `"list_allowed_directories.**"` possible: the server may name its own root and
-nothing else.
+nothing else. **This is the most useful shape of grant on servers with no field
+structure to scope by.** `mcp-server-git` returns one text blob from every tool,
+so there is no `sender`/`body` split to exploit — but `"git_status.**"` and
+`"git_diff_unstaged.**"` are different grants, and that is the whole difference
+between admitting a filename the working tree reported and admitting one a
+poisoned source comment asked for. See
+[`BENCHMARKS.md`](BENCHMARKS.md#the-coding-agent-and-a-defence-that-was-not-ours-2026-09-14).
+
+> **Read U08 before you rely on a per-tool grant.** The grant asserts that
+> values appearing under that path are ones your principal would endorse, and
+> whether that holds is decided by data, not by the policy. The git grant above
+> is safe only while `.gitignore` keeps secrets out of `git_status`; on a
+> repository without that line the same policy stages a deploy token. The linter
+> cannot catch this — at lint time there is no data — and the audit log only
+> shows it after the call. [`LIMITATIONS.md`](LIMITATIONS.md) §4.2g.
 
 Both numeric knobs trade security against utility, neither has a defensible
 universal value, and they interact — reference binding is meaningless below a

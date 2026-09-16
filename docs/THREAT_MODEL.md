@@ -376,6 +376,32 @@ is exhausted. An attacker who can drive either can stop the agent working.
 Failing closed is the right trade for a security control, but it *is* a
 denial-of-service surface and should not be described as free.
 
+### U08 · A field-path grant's security is decided by data, not by the grant
+
+`authoritative_paths` scopes authority to the parts of a result that carry the
+principal's own world — `sender` and not `body`, working tree and not content.
+Whether a given path actually carries only endorsable values is a property of
+the **data**, and it can change without the policy changing.
+
+Demonstrated on `mcp-server-git`: a grant over `git_status.**` refuses an
+injected `git_add .env` and admits the legitimate `git_add CHANGELOG.md`, which
+is exactly the discrimination the mechanism exists for. It works because
+`.gitignore` keeps `.env` out of `git_status` output. On a repository without
+that line, `git_status` names the secret, the same grant makes it authoritative,
+and the token is staged and committed. Same policy, same tools, no diff.
+
+*Detectable?* Not at configuration time. `idensec.lint` reasons about contracts
+and has no data. The audit log records which field path authorised each admitted
+value, so a grant that begins authorising a new class of value is visible
+**after** the call — detection, not containment.
+
+*Relationship to U06.* U06 is the integrator labelling something wrongly. U08 is
+the integrator labelling something correctly for the data they inspected, and
+the data changing underneath. The second is harder, because there is no moment
+at which anyone did anything wrong.
+
+Recorded in [`LIMITATIONS.md`](LIMITATIONS.md) §4.2g. Unmitigated.
+
 ---
 
 ## Mapping to published catalogues

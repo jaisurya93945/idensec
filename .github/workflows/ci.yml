@@ -78,7 +78,13 @@ jobs:
 
       - name: Contract linter is clean on shipped examples
         # Dogfooding: if our own contracts do not pass, nobody else's will.
-        run: python -m idensec.lint examples/mcp/filesystem-contracts.json
+        # Every contract file we ship, not just the first one written -- the
+        # git corpus was added after this step existed and would have been
+        # silently unchecked.
+        run: |
+          python -m idensec.lint examples/mcp/filesystem-contracts.json
+          python -m idensec.lint examples/mcp/git-contracts.json
+          python -m idensec.lint examples/mcp/memory-contracts.json
 
       - name: Example runs
         run: python examples/summarise_and_mail.py
@@ -94,6 +100,15 @@ jobs:
         # observation. Fails if an injected delete gets through, or if the
         # narrow labelling cannot do the ordinary work.
         run: python examples/mcp/attack_memory.py
+
+      - name: A coding agent on a repository it did not write
+        # mcp-server-git under a source-comment injection whose goal is
+        # exfiltration by commit. Scored on the proxy's VERDICT, not on what
+        # ended up staged: an earlier version scored the effect and passed a
+        # configuration that git's own .gitignore had rescued.
+        run: |
+          python -m pip install --upgrade uv
+          python examples/mcp/attack_git.py
 
       - name: Benchmarks run
         run: python benchmarks/bench_monitor.py --quick

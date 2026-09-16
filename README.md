@@ -315,6 +315,26 @@ injection **named**:
 python3 examples/mcp/attack_memory.py
 ```
 
+**The coding agent, against an unmodified `mcp-server-git`** — the case the
+roadmap guesses at first. A poisoned comment in a source file asks the agent to
+`git_add .env`, which holds a deploy token: exfiltration by commit, no network
+tool required. Granting the repository nothing refuses the injection *and* the
+ordinary act of staging a file `git_status` just reported. Granting
+`git_status.**` alone gets every call right — because the working tree is not
+content, and injections live in content.
+
+It also produced the most uncomfortable result in the project. Under the broad
+grant the token did not land, and the example scored that a pass until we looked
+at the verdict: the proxy had **allowed** the call and git's own `.gitignore`
+refused the write. And the grant that works, works only because `.gitignore`
+keeps `.env` out of `git_status` — remove that line and the same policy stages
+the token. A field-path grant's security can be decided by data the operator
+cannot see from the policy file (U08, unmitigated):
+
+```
+python3 examples/mcp/attack_git.py
+```
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```
@@ -361,7 +381,7 @@ path and losing half the utility to it.
 IDENSEC's bet is that provenance can be made **structural instead of inferred**.
 The reasoning, the evidence and the confidence levels are in
 [`docs/RESEARCH.md`](docs/RESEARCH.md); the decision to abandon the original
-thesis is [ADR-0001](docs/DESIGN_DECISIONS.md#adr-0001).
+thesis is [ADR-0001](docs/DESIGN_DECISIONS.md#adr-0001--do-not-build-a-delegated-authority-authorization-platform).
 
 ## Contributing
 

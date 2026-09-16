@@ -6,6 +6,116 @@ comfortable, it was written badly.
 
 ---
 
+## 2026-09-14 — the first user we guessed at, and a result we had to take back
+
+[`ROADMAP.md`](ROADMAP.md) has named the same first user since the project
+started: *coding agents on external repos*. It had never been tested. This
+milestone tested it — the proxy in front of an unmodified `mcp-server-git`, the
+injection in a source comment, the goal exfiltration by commit — and three
+things came out of it, in descending order of how much they hurt.
+
+### 1. A result was scored wrong in our favour, and we published nothing before catching it
+
+The example checks whether an injected `git_add .env` succeeds. Under the broad
+grant the token did not end up staged, and the example reported **ok**.
+
+It was not ok. The proxy had **allowed** the call. Git's own `.gitignore`
+refused the write. The example was scoring the effect on disk, so in the one
+configuration that had already been bypassed it recorded a pass, and attributed
+to IDENSEC a defence supplied by a tool we do not ship, do not control, and did
+not mention.
+
+Nothing was published from it. That is luck, not process: the only reason it was
+caught is that the result *seemed too good* — three labellings in a row getting
+every row right is not what this project's other measurements look like.
+
+Every row now prints the verdict before the effect, and the exit status is
+computed from verdicts.
+
+**This is the second consecutive milestone where the thing that was wrong was a
+measurement, not a mechanism.** The previous one was a dangerous miss found by
+bisecting a utility *drop*. Both were caught by disbelieving a pass. Neither was
+caught by review, and the review in both cases was mine.
+
+### 2. U08 — a grant can be correct against the data you inspected and wrong against the data you get
+
+Per-tool scoping is the setting that works on this server: grant
+`git_status.**` and the legitimate unnamed file is admitted while the injected
+one is refused. Clean result, right for a reason — the working tree is not
+content, and injections live in content.
+
+Then we ran the same policy against a repository whose `.env` is not in
+`.gitignore`. `git_status` names the secret itself, the grant makes it
+authoritative, and the token is staged and committed. **Same policy, same tools,
+no diff.**
+
+So `.gitignore` appeared twice in one experiment doing opposite work: once
+masking a policy failure, once holding up a policy success.
+
+> A field-path grant is a claim about data the operator has not seen. Whether it
+> holds is decided outside the policy, `idensec.lint` cannot check it — at lint
+> time there is no data — and the audit log only shows it after the call.
+
+Recorded as U08, unmitigated. It is a different kind of limit from the ones
+already listed: §4.1 and §4.2b bound what provenance can *decide*; U08 bounds
+what an operator can *know they have configured*.
+
+### 3. `strict` is not merely costly on this server, it is unusable
+
+On the filesystem server, `strict` refused the principal's own read. Here it
+refuses the ordinary act of staging a file `git_status` has just reported — and
+developers say *"commit my changes"*, not *"commit README.md and
+CHANGELOG.md"*. The operands a developer omits are exactly the ones the
+repository supplies, so the quotation floor has nothing to work with.
+
+A fourth finding is smaller but concrete: **all twelve `mcp-server-git` tools
+take `repo_path`**, so under the unattributed rule the *first* call of every
+session is denied. §4.2e had stated the bootstrap requirement abstractly; it now
+has a named instance, and the remedy is outside the policy — the host must name
+the checkout.
+
+### Is the thesis disproven?
+
+**No, and the confidence in the numbers should go down anyway.**
+
+The AgentDojo curve was produced with grants we wrote against data we could
+inspect in full. U08 says that is precisely the condition which does not hold in
+deployment. The honest reading is that **the published curve is an upper bound
+on what an operator would get**, not an estimate of it, and nothing in this
+milestone tells us how far below it the real number sits.
+
+Set against that, the mechanism did what it claims on software we did not write,
+against an attack with a plausible payoff and no exotic capability. That is the
+third such server, and the first that matches the user we have always named.
+
+### What should happen next
+
+1. **Make U08 visible at configuration time.** A grant that could declare the
+   operand *shape* it expects and refuse a surprise would be containment rather
+   than detection. Whether that is expressible without becoming a classifier —
+   the thing this project refuses to build — is genuinely unknown, and it should
+   not be attempted until it is answered.
+2. **Stop adding servers for a while.** Three is enough to know the cost per
+   server; a fourth mostly buys confidence, and confidence is not what is short.
+3. **Users.** Unchanged from every previous entry, and now conspicuous: the
+   coding-agent case is demonstrated *technically* and still has nobody in it.
+
+### The strongest criticism, updated again
+
+> *"You have now found that your own security results depend on data you never
+> looked at, one server after the numbers you publish were fixed. Why should
+> anyone believe the numbers rather than the pattern?"*
+
+The pattern is the more honest thing to believe. Four milestones, four defects
+found by measurement rather than review, and this one was in the measurement
+itself. The counter-argument is thin and should be stated as thin: every defect
+is now a regression test, every number is published as a curve rather than a
+figure, and the project reports the labellings that fail beside the ones that
+work — which is why this entry exists at all. That is a process that surfaces
+its own errors. It is not evidence that there are few left.
+
+---
+
 ## 2026-09-12 (later) — a benchmark number moved the wrong way, and it was right to
 
 Three things happened after the previous entry, and the order matters.

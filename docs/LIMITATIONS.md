@@ -239,8 +239,16 @@ attribute and therefore nothing to refuse. A containment design without such a
 tool cannot start at all, and that is a fact about the server's API rather than
 about IDENSEC.
 
-Both found by running the proxy against a real MCP server rather than a
-benchmark — see [`BENCHMARKS.md`](BENCHMARKS.md).
+**A widely deployed server with no such tool already exists.** All twelve
+`mcp-server-git` tools take `repo_path`, so under the unattributed rule the
+*first* call of every session is denied and nothing can proceed. The remedy is
+not in the policy: the **host** must name the checkout out of band — in the task
+it hands the agent, which is what hosts already do with a working directory.
+So the requirement is *a zero-argument bootstrap tool, or a host that supplies
+the root*, and where neither exists the design does not deploy.
+
+Found by running the proxy against real MCP servers rather than a benchmark —
+see [`BENCHMARKS.md`](BENCHMARKS.md).
 
 ### 4.2f A safety flag cannot be protected by role
 
@@ -253,6 +261,37 @@ constraint on the value, not on the parameter.
 Marking it `AUTHORITY` is not the fix: booleans are almost never attributable,
 so it would deny every legitimate edit. Recorded in the shipped contract for
 that tool, where a reviewer will see it.
+
+### 4.2g A grant's security can depend on the data, invisibly (U08)
+
+Scoping authority by field path works because different fields of a result carry
+different trust — `sender` versus `body`, working tree versus content. On
+`mcp-server-git` the split that works is `git_status` versus
+`git_diff_unstaged`: the injected filename appears only in the diff, so a grant
+over `git_status.**` admits the legitimate unnamed file and refuses the injected
+one.
+
+That separation is not a property of the policy. It holds because `.gitignore`
+keeps `.env` out of `git_status`. Delete that line and `git_status` names the
+secret itself, the same grant makes it authoritative, and the token is staged
+and committed — **policy unchanged, tools unchanged, defence gone**.
+
+The general statement: a field-path grant is a claim that *the values appearing
+under this path are ones the principal would endorse*, and whether that claim
+holds is decided by data the operator does not control and cannot see from the
+policy file. Nothing in the labelling vocabulary expresses the dependency, and
+`idensec.lint` cannot check it, because at lint time there is no data.
+
+This is not the same as §4.2b or §4.1. Those are limits on what provenance can
+*decide*. This is a limit on what an operator can *know they have configured* —
+a grant that is correct on Monday's repository and wrong on Tuesday's, with no
+diff in between. Recorded as **U08** in [`THREAT_MODEL.md`](THREAT_MODEL.md).
+
+There is no mitigation in this release. The nearest honest one is monitoring
+rather than prevention: the audit log records the field path that authorised
+every admitted value, so a grant that starts authorising a new *kind* of value
+is visible after the fact. That is detection, not containment, and it should be
+read as an admission.
 
 ### 4.3 Extraction coverage is a security parameter
 
@@ -306,6 +345,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | **stdio transport only** | The proxy does not yet speak streamable HTTP. Framework adapters are roadmap, not code. |
 | **A parameter whose sub-fields have different roles must say so** | `create_entities(entities)` takes `[{name, entityType, observations}]`: the name is authority, the note is content. `ParameterContract.payload_paths` names the exemptions, one at a time, on a parameter that stays `AUTHORITY`. Forgetting one costs a denial; the opposite arrangement would make forgetting one a bypass. It is another per-API declaration, and `idensec.lint` reports a writing tool where nothing bears authority. |
 | **Reference binding needs a collection per parameter, and real servers do not supply one** | `ParameterContract.collection` says which directory an id addresses. `derive_contract` drafts it from `<noun>_id` names — which fires on **2 of 60** authority parameters across seven published MCP servers, because they name things `path`, `repo_path` and `branch_name`. Against those servers every collection is hand-authored or reference binding never runs. A wrong draft costs a denial; an absent one makes the grant inert, which `idensec.lint` reports. |
+| **A field-path grant's security is decided by data** | Scoping authority by path assumes the values under that path are ones the principal would endorse, and that is a property of the data rather than of the policy. On `mcp-server-git` the grant that works depends on `.gitignore` keeping secrets out of `git_status`. No configuration-time check exists, and the audit log shows it only after the call. §4.2g, U08. |
 | **Effect hints are read from the server, one way only** | MCP tool annotations come from the bottom of the integrity lattice. Hints that *restrict* (`destructiveHint`, `openWorldHint`) are believed; `readOnlyHint` is ignored, because believing it would disable the confidentiality rules — and 32 of 52 real tools claim it. This never reduces the operator's obligation to declare effects. |
 
 ---
@@ -320,7 +360,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | Latency figures | **Measured**, on a shared unpinned host; spread reported. |
 | Extraction coverage is adequate | **Measured** on a synthetic corpus: 93% recall, 0 false positives. Not measured against real traffic. |
 | Contract derivation is accurate | **Measured** on 25 hand-labelled schemas: 100% authority recall, 0 dangerous misses. Ground truth is our own. |
-| Task utility under enforcement | **Measured**: a surface over thirty configurations, from 96.7%/43.3% to 85.2%/74.2%. Best above 90% security: 91.8%/64.9%. Never both above 90/70. |
+| Task utility under enforcement | **Measured**: a surface over thirty configurations, from 96.7%/43.3% to 85.2%/74.2%. Best above 90% security: 91.8%/64.9%. Never both above 90/70. **Read it as an upper bound**, not an estimate: the grants were written against data we could inspect in full, which §4.2g (U08) says is not the deployment condition. How far below it a real operator lands is unmeasured. |
 | Literature comparisons | **Unverified** — search summaries, not primary sources. |
 | Anyone wants this | **Unvalidated.** No users, no customers, no pilot. Every business statement in this repository is hypothesis. |
 
