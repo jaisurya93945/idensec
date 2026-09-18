@@ -601,7 +601,10 @@ injections live, and quoting one must never bind a reference.
 
 ## ADR-0012 — Composition: decompose the value, not the provenance
 
-**Status:** accepted · 2026-09-12
+**Status:** accepted · 2026-09-12 · amended 2026-09-18 by
+[ADR-0013](#adr-0013--composition-over-urls-and-what-building-it-found), which
+found that a composed value was existentially principal-directed and so
+disabled the confidential-egress rule.
 
 ### Problem
 
@@ -675,3 +678,95 @@ and `..` is refused outright rather than decomposed: `/srv/notes` and
   then never fired against a real server at all: a path read out of a directory
   listing is perfectly attributable — to a listing the source is not
   authoritative for.
+
+---
+
+## ADR-0013 — Composition over URLs, and what building it found
+
+**Status:** accepted · 2026-09-18
+
+### Problem
+
+[`ROADMAP.md`](ROADMAP.md) listed *composition beyond paths* as open work with a
+warning attached: a wrong answer on a URL host is worse than one on a path
+segment. The utility failure is the same as ADR-0012's, on a higher-stakes
+value: the principal names a host, the agent joins the endpoint, and the
+resulting string is one nobody ever emitted — so it traces to nobody and is
+denied, the principal's own request included.
+
+### What was tried first, and why it does not work
+
+Parse the URL. `urlsplit` gives scheme, host, path segments and query
+parameters; check each universally, as ADR-0012 checks path components.
+
+**It denies every case, the principal's own included.** `/`, `:` and `@` are
+identifier characters in the ledger's alphabet, so `api.corp.example` is never a
+*whole token* of any URL a source wrote — its left neighbour is always `/`.
+Decomposing a URL into its semantic parts produces components no source ever
+emitted as tokens, so none can be quoted, so none can be attributed.
+
+This is worth recording because it is the version anyone would write first.
+
+### Decision
+
+Extend the **prefix/remainder** split ADR-0012 already uses, gated on a separate
+`Policy.compose_urls`, off by default. Each half is a string a source really
+could have written: `https://api.corp.example` and `reports`.
+
+Separate from `compose_paths` because the stakes differ. A composed filename is
+an address; a composed URL is an egress destination, and an operator should be
+able to take one without the other.
+
+`git_remote` is **not** included. `git@host:path` splits at a colon, and
+claiming it composes without measuring it would be a guess wearing a mechanism's
+clothes.
+
+### Measured
+
+Six cases, `benchmarks/url_composition.py`:
+
+| case | `off` | `compose_urls` |
+| --- | --- | --- |
+| the principal's own post | **deny** | allow |
+| injected host | deny | deny |
+| exfiltration by query string | deny | deny |
+| exfiltration by path segment | deny | **escalate** |
+| lookalike host (`api.corp.example.evil.example`) | deny | deny |
+| userinfo confusion (`api.corp.example@evil.example`) | deny | deny |
+
+The lookalike and userinfo cases are refused **structurally**, not luckily: the
+whole host string is never a token of any source, so a host nobody wrote cannot
+be quoted regardless of what it resembles. That property is a consequence of
+splitting into halves rather than parsing into parts — the version that does not
+work is also the version that would have had to get URL parsing right.
+
+### The hole this experiment found in ADR-0012
+
+Exfiltration by path segment — `https://api.corp.example/4471029833`, an
+authorised host with a confidential account number as the leaf — came back
+**ALLOW with no findings at all**.
+
+Composition merges the origins of both halves, and `Attribution.principal_directed()`
+was **existential**: one principal-supplied component made the whole destination
+look principal-chosen, which skipped the egress block entirely, taking
+`confidential_egress` with it.
+
+That was live in `compose_paths` as shipped. It had never bitten only because
+the filesystem server ADR-0012 was built against exposes no egress tool.
+
+**`principal_directed()` is now universal for a composed attribution**, for
+exactly the reason the component check is universal: the prefix chose the tree
+and the remainder chose the leaf, so a destination is principal-chosen only if
+the principal chose every part of it. Ordinary values are unaffected — they have
+one meaning and one chooser, so one principal origin still settles it.
+
+### Consequences
+
+- The remaining defence on the path-segment case is **escalation**, not denial.
+  That asks a human, which is weaker than refusing, and the benchmark says so at
+  the point of measurement rather than in a footnote.
+- **Six hand-written cases are a floor, not a proof.** `compose_urls` ships off
+  by default for that reason as much as any other.
+- A mechanism built for one server found a hole in a mechanism built for
+  another. That is the third time running against unfamiliar software has
+  surfaced something review did not.

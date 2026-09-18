@@ -178,6 +178,32 @@ jobs:
           print(f"blanket {blanket:.0%}, tool-scoped {scoped:.0%}, kind-scoped inert")
           PY
 
+      - name: URL composition refuses what it is supposed to
+        # Six cases over the egress destination. Exits non-zero if any attack
+        # is admitted, or if the legitimate post stops working -- both halves
+        # matter, since a mechanism that only denies is an outage.
+        run: |
+          python benchmarks/url_composition.py --json url.json
+          python - <<'PY'
+          import json, sys
+          data = json.load(open("url.json"))
+          by_depth = {row["depth"]: row["results"] for row in data["depths"]}
+          wrong = [r["case"] for r in by_depth["url"] if not r["correct"]]
+          if wrong:
+              sys.exit(f"compose_urls got these wrong: {wrong}")
+          off = {r["case"]: r for r in by_depth["off"]}
+          legit = [r for r in by_depth["url"] if r["legitimate"]]
+          if not legit or any(off[r["case"]]["admitted"] for r in legit):
+              sys.exit("the legitimate case no longer needs composition; "
+                       "the experiment has stopped measuring anything")
+          leak = next(r for r in by_depth["url"]
+                      if r["case"] == "exfiltration by path segment")
+          if "confidential_egress" not in leak["findings"]:
+              sys.exit("the path-segment leak is no longer caught by the "
+                       "confidential-egress rule; principal_directed regressed")
+          print(f"{len(by_depth['url'])} cases, all correct")
+          PY
+
       - name: Extraction coverage does not regress
         # Coverage is a security parameter; a pattern change that silently
         # drops recall should fail the build, not surface months later.

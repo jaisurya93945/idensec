@@ -27,8 +27,16 @@ from typing import Any
 from .contracts import ContractRegistry, Effect, ParameterContract, Role, ToolContract
 from .kinds import KIND_REGISTRY, REFERENCED, UNCLASSIFIED
 from .labels import Source, path_covers
+from .policy import Disposition, Policy
 
-__all__ = ["Diagnostic", "Severity", "lint_contract", "lint_registry", "lint_sources"]
+__all__ = [
+    "Diagnostic",
+    "Severity",
+    "lint_contract",
+    "lint_policy",
+    "lint_registry",
+    "lint_sources",
+]
 
 
 _PSEUDO_KINDS = frozenset({UNCLASSIFIED, REFERENCED})
@@ -415,10 +423,45 @@ def lint_sources(
     return found
 
 
+def lint_policy(policy: Policy, registry: ContractRegistry) -> list[Diagnostic]:
+    """Check the policy's settings against each other, not against the world.
+
+    Most of this file reasons about contracts. This reasons about a combination
+    of switches that is individually defensible and jointly unsound, which no
+    single setting's documentation can catch.
+    """
+    found: list[Diagnostic] = []
+    composing = policy.compose_paths or policy.compose_urls
+    egress_tools = [c.tool for c in registry if c.can_egress]
+    if (
+        composing
+        and egress_tools
+        and policy.confidential_egress is Disposition.ALLOW
+    ):
+        which = "compose_urls" if policy.compose_urls else "compose_paths"
+        found.append(
+            Diagnostic(
+                Severity.WARNING,
+                "composition-without-egress-guard",
+                "<policy>",
+                f"{which} is on, {len(egress_tools)} tool(s) can egress "
+                f"({', '.join(sorted(egress_tools)[:3])}), and "
+                "confidential_egress is ALLOW. Composition admits a destination "
+                "whose every component is separately authorised, so an "
+                "authorised host with a confidential value as its leaf passes "
+                "the component check -- and escalation is the only thing that "
+                "then stops it. Measured in benchmarks/url_composition.py.",
+            )
+        )
+    return found
+
+
 def lint_registry(
-    registry: ContractRegistry, sources: Sequence[Source] = ()
+    registry: ContractRegistry,
+    sources: Sequence[Source] = (),
+    policy: Policy | None = None,
 ) -> list[Diagnostic]:
-    """Lint every contract, plus source grants when they are supplied."""
+    """Lint every contract, plus source grants and policy when supplied."""
     found: list[Diagnostic] = []
     if not len(registry):
         found.append(
@@ -433,6 +476,8 @@ def lint_registry(
     for contract in registry:
         found.extend(lint_contract(contract))
     found.extend(lint_sources(sources, registry))
+    if policy is not None:
+        found.extend(lint_policy(policy, registry))
     return sorted(found, key=lambda d: (-d.severity, d.tool, d.parameter, d.code))
 
 
@@ -486,16 +531,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     sources: list[Source] = []
+    policy: Policy | None = None
     if args.config is not None:
         from .mcp.config import ConfigError, ProxyConfig
 
         try:
-            sources.append(ProxyConfig.load(args.config).source)
+            config = ProxyConfig.load(args.config)
         except ConfigError as exc:
             print(f"idensec-lint: cannot read {args.config}: {exc}")
             return 2
+        sources.append(config.source)
+        policy = config.policy
 
-    diagnostics = lint_registry(registry, sources)
+    diagnostics = lint_registry(registry, sources, policy)
     print(to_json(diagnostics) if args.json else render(diagnostics))
 
     threshold = Severity[args.max_severity.upper()]

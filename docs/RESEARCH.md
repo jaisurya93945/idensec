@@ -1106,7 +1106,10 @@ times each. Three defects stacked, and each hid the next:
 
 * the examples handed the proxy a **hand-built environment** of ``PATH`` and
   ``PYTHONPATH`` only. ``npx`` needs more than that to reach a registry, so the
-  server started late or not at all.
+  server started late or not at all. The same was true of ``uvx`` in the git
+  example, which had been passed ``PATH`` and ``HOME`` and looked fine until a
+  cold cache made it reach for the network. All three now inherit the ambient
+  environment and override ``PYTHONPATH``, which is what a real host does.
 * ``read`` **could not time out**. It looped until a deadline calling
   ``readline``, which blocks -- so the deadline was consulted only between
   lines, and one slow reply hung the run rather than ending it.
@@ -1130,6 +1133,62 @@ found by a number moving the wrong way; a scoring bug that credited us with
 git's defence; and now a grant whose plain-language reading understated its
 surface by two orders of magnitude. None of the three was a bug in the
 enforcement path. All three were bugs in the view of it.
+
+---
+
+## Thread 3p — Composition over URLs, and the hole it found behind it (2026-09-18)
+
+`EXPERIMENT` — [`ROADMAP.md`](ROADMAP.md) listed *composition beyond paths* with
+a warning: a wrong answer on a URL host is worse than on a path segment. Six
+cases against an egress tool, measured before building anything.
+``benchmarks/url_composition.py``.
+
+`RESULT` — **The obvious implementation fails completely.** Parse the URL with
+``urlsplit``; check scheme, host, each path segment, each query parameter
+universally. It denies all six cases, the principal's own included. ``/``, ``:``
+and ``@`` are identifier characters in the ledger's alphabet, so
+``api.corp.example`` is never a *whole token* of a URL anybody wrote — its left
+neighbour is always ``/``. Semantic decomposition produces components no source
+ever emitted, so none can be quoted and none can be attributed.
+
+`INFERENCE` — Worth recording because it is what anyone would write first, and
+because the failure is not a bug to fix but a statement about the design:
+attribution works on **strings a source could have said**, not on meanings. The
+prefix/remainder split works precisely because both halves are such strings.
+
+`FACT` — That is also why the lookalike (``api.corp.example.evil.example``) and
+userinfo (``api.corp.example@evil.example``) attacks are refused
+**structurally** rather than luckily: the whole host string is never a token, so
+a host nobody wrote cannot be quoted regardless of what it resembles. The
+version that parses is also the version that would have had to get URL parsing
+right — historically the least reliable code in any security boundary.
+
+`RESULT` — **A live hole in the shipped ``compose_paths``**, found by the one
+case the URL work added. ``https://api.corp.example/4471029833`` — an authorised
+host, a confidential account number as the leaf — came back **ALLOW with no
+findings at all**. Every component stands up, so composition has nothing to
+object to; the check that must catch it is ``confidential_egress``, and it was
+not firing. Composition *merges* the origins of both halves, and
+``principal_directed()`` was **existential**: one principal-supplied component
+made the whole destination look principal-chosen and skipped the egress block.
+
+`FACT` — Live in ADR-0012 as shipped, and it had never bitten for one reason
+only: the filesystem server that mechanism was built against exposes no egress
+tool. ``principal_directed()`` is now universal for a composed attribution, for
+exactly the reason the component check is.
+
+`INFERENCE` — The general statement, and the thing to carry forward:
+**composition conflates *this source may name this value* with *this value may
+appear in this position*.** For a path the two coincide — a filename in a path is
+being addressed. For an egress URL they do not: a path segment is content
+leaving the building. Any future decomposition has to answer that question
+separately from attribution.
+
+`FACT` — Residue, stated rather than buried: the exfiltration case is caught by
+**escalation**, not denial. An operator who sets ``confidential_egress`` to ALLOW
+gets the leak. Six hand-written cases are a floor, not a proof, and
+``compose_urls`` ships off by default. ``git_remote`` splits at a colon and is
+excluded rather than assumed.
 
 ---
 

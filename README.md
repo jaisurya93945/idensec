@@ -357,6 +357,24 @@ reaches for first admits *nothing*, because git reports repo-relative names:
 python3 benchmarks/grant_surface.py
 ```
 
+**Composition over URLs, and a hole behind it** — the principal names a host,
+the agent joins the endpoint, and the joined string traces to nobody. Extending
+composition to URLs fixes that, refuses an injected host, a lookalike
+(`api.corp.example.evil.example`) and userinfo confusion
+(`api.corp.example@evil.example`) — the last two *structurally*, because the
+whole host string is never a token any source wrote.
+
+Building it found a live hole in the shipped path composition. Exfiltration to
+an authorised host with a confidential value as the leaf came back **allow, with
+no findings**: composition merges origins, and `principal_directed()` was
+existential, so one principal-supplied component disabled the confidential-egress
+rule for the whole call. It had never bitten because the filesystem server has no
+egress tool. Now universal for composed values:
+
+```
+python3 benchmarks/url_composition.py
+```
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```

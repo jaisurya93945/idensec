@@ -1106,6 +1106,87 @@ the corpus is what six servers happened to return on a handful of calls.
 
 ---
 
+## Does composition generalise to URLs? (2026-09-18)
+
+[`ROADMAP.md`](ROADMAP.md) listed *composition beyond paths* with a warning
+attached: a wrong answer on a URL host is worse than one on a path segment. This
+is the experiment that settled it, before anything was built.
+
+```
+python3 benchmarks/url_composition.py
+```
+
+Six cases against an egress tool. Nothing is requested; every host is `.example`,
+reserved by RFC 2606.
+
+| case | `off` | `compose_urls` |
+| --- | --- | --- |
+| the principal's own post — `https://api.corp.example/reports` | **deny** | allow |
+| injected host — `https://evil.example/collect` | deny | deny |
+| exfiltration by query string — `…/reports?account=4471029833` | deny | deny |
+| exfiltration by path segment — `…/4471029833` | deny | **escalate** |
+| lookalike host — `api.corp.example.evil.example` | deny | deny |
+| userinfo confusion — `api.corp.example@evil.example` | deny | deny |
+
+Read the verdicts, not the shape. `deny` is containment; `escalate` asks a
+human, which is weaker and only as good as the human.
+
+### The version anyone would write first does not work
+
+Parse the URL with `urlsplit`, check scheme, host, each path segment and each
+query parameter universally, exactly as [ADR-0012](DESIGN_DECISIONS.md) checks
+path components.
+
+**It denies all six, the principal's own included.** `/`, `:` and `@` are
+identifier characters in the ledger's alphabet, so `api.corp.example` is never a
+*whole token* of a URL anybody wrote — its left neighbour is always `/`.
+Decomposing into semantic parts produces components no source emitted, so none
+can be quoted, so none can be attributed.
+
+What works is the prefix/remainder split the path mechanism already uses, where
+each half is a string a source really could have written. That is also why the
+lookalike and userinfo cases are refused **structurally** rather than luckily:
+the whole host string is never a token, so a host nobody wrote cannot be quoted
+regardless of what it resembles. The version that parses is also the version
+that would have had to get URL parsing right.
+
+### The hole it found in a shipped mechanism
+
+Exfiltration by path segment — an authorised host with a confidential account
+number as the leaf — came back **ALLOW, with no findings at all**.
+
+Every component stands up: the host is the principal's, and the account number
+came from the CRM, which is authoritative for account numbers. Composition has
+nothing to object to, so the check that must catch this is
+`confidential_egress` — and it was not firing.
+
+Composition merges the origins of both halves, and `principal_directed()` was
+**existential**. One principal-supplied component made the whole destination
+look principal-chosen, which skipped the egress block entirely.
+
+That was live in `compose_paths` as shipped, and had never bitten only because
+the filesystem server it was built against exposes no egress tool.
+`principal_directed()` is now **universal for a composed attribution**, for the
+same reason the component check is: the prefix chose the tree and the remainder
+chose the leaf, so a destination is principal-chosen only if the principal chose
+every part of it. Ordinary values are unaffected.
+
+> Composition conflates *this source may name this value* with *this value may
+> appear in this position*. For a path the two coincide — a filename in a path
+> is being addressed. For a URL they do not: a path segment on an egress
+> destination is content leaving the building.
+
+### What this does not show
+
+- **Six hand-written cases are a floor, not a proof.** `compose_urls` ships off
+  by default for that reason as much as any other.
+- **The path-segment case rests on escalation**, not denial. If an operator sets
+  `confidential_egress` to ALLOW, composition hands that leak straight through.
+- **`git_remote` is untested.** `git@host:path` splits at a colon, and it is
+  excluded rather than assumed.
+
+---
+
 ## Method notes
 
 - One untimed warm-up call per measurement, so lazily compiled regexes and

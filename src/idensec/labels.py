@@ -339,7 +339,27 @@ class Attribution:
         return False
 
     def principal_directed(self) -> bool:
-        """True if the principal themselves is among the contributing origins."""
+        """Whether the principal chose this value, for the egress rules.
+
+        **Existential for an ordinary value, universal for a composed one**, and
+        the asymmetry is the same one composition rests on (ADR-0012). A value
+        with a single meaning has one chooser, so one principal origin settles
+        it. A composed value does not: the prefix chose the tree and the
+        remainder chose the leaf, so a destination is principal-chosen only if
+        the principal chose *every* part of it.
+
+        Getting this wrong was a real hole, not a hypothetical. ``compose_paths``
+        merges the origins of both halves, so a path built from a principal's
+        root and a confidential leaf came back existentially principal-directed
+        --- which switched off ``confidential_egress`` for the whole call and
+        turned an escalation into an allow with no findings at all. It never bit
+        because the server we composed against has no egress tool. Measured in
+        ``benchmarks/url_composition.py``.
+        """
+        if not self.origins:
+            return False
+        if self.composed:
+            return all(o.trust >= Trust.USER_INPUT for o in self.origins)
         return any(o.trust >= Trust.USER_INPUT for o in self.origins)
 
 

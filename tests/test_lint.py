@@ -29,7 +29,15 @@ from idensec.contracts import (
 )
 from idensec.kinds import REFERENCED, UNCLASSIFIED
 from idensec.labels import Sensitivity, Source, Trust
-from idensec.lint import Severity, lint_contract, lint_registry, lint_sources, render
+from idensec.lint import (
+    Severity,
+    lint_contract,
+    lint_policy,
+    lint_registry,
+    lint_sources,
+    render,
+)
+from idensec.policy import Disposition, Policy
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -495,3 +503,50 @@ def test_a_whole_source_unclassified_grant_is_reported() -> None:
     )
     codes = [d.code for d in lint_sources([source], registry)]
     assert "blanket-unclassified-grant" in codes
+
+
+def test_composition_with_egress_and_no_confidentiality_guard_is_reported() -> None:
+    """A combination that is defensible setting by setting and unsound together.
+
+    Composition admits a destination whose every component is separately
+    authorised, so an authorised host with a confidential leaf passes the
+    component check. Escalation is the only thing that then stops it, and an
+    operator who turned escalation off has removed the last defence without
+    touching anything named 'composition'.
+    """
+    registry = ContractRegistry([
+        ToolContract(
+            tool="http_post",
+            effects=frozenset({Effect.NETWORK_EGRESS}),
+            parameters={"url": ParameterContract("url", Role.AUTHORITY)},
+        )
+    ])
+    policy = Policy(compose_urls=True, confidential_egress=Disposition.ALLOW)
+    assert "composition-without-egress-guard" in {
+        d.code for d in lint_policy(policy, registry)
+    }
+
+
+def test_composition_with_escalation_left_on_is_not_reported() -> None:
+    registry = ContractRegistry([
+        ToolContract(
+            tool="http_post",
+            effects=frozenset({Effect.NETWORK_EGRESS}),
+            parameters={"url": ParameterContract("url", Role.AUTHORITY)},
+        )
+    ])
+    policy = Policy(compose_urls=True)
+    assert lint_policy(policy, registry) == []
+
+
+def test_composition_without_any_egress_tool_is_not_reported() -> None:
+    """The configuration ADR-0012 was built against. Nothing to warn about."""
+    registry = ContractRegistry([
+        ToolContract(
+            tool="read_file",
+            effects=frozenset({Effect.READ}),
+            parameters={"path": ParameterContract("path", Role.AUTHORITY)},
+        )
+    ])
+    policy = Policy(compose_paths=True, confidential_egress=Disposition.ALLOW)
+    assert lint_policy(policy, registry) == []

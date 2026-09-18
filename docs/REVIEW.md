@@ -6,6 +6,84 @@ comfortable, it was written badly.
 
 ---
 
+## 2026-09-18 — a mechanism for one server found a hole in a mechanism for another
+
+The roadmap has listed *composition beyond paths* since ADR-0012 shipped, with a
+warning attached: a wrong answer on a URL host is worse than one on a path
+segment. Six measured cases settled it, and the interesting results are the two
+nobody was looking for.
+
+### The obvious implementation fails completely
+
+Parse the URL; check scheme, host, path segments, query parameters. It denies
+all six cases including the principal's own. `/`, `:` and `@` are identifier
+characters, so `api.corp.example` is never a *whole token* of any URL anybody
+wrote — semantic decomposition produces components no source ever emitted.
+
+That is a statement about the design, not a bug: **attribution works on strings
+a source could have said, not on meanings.** It is also why the prefix/remainder
+split refuses lookalike hosts and userinfo confusion *structurally* rather than
+by getting URL parsing right — which is historically the least reliable code in
+any security boundary.
+
+### The shipped mechanism had an egress hole
+
+`https://api.corp.example/4471029833` — authorised host, confidential account
+number as the leaf — came back **ALLOW with no findings at all**.
+
+Composition merges the origins of both halves, and `principal_directed()` was
+existential. One principal-supplied component made the whole destination look
+principal-chosen, which skipped the egress block and took `confidential_egress`
+with it. Live in `compose_paths` since ADR-0012; never bit because the
+filesystem server it was built against has no egress tool.
+
+> Composition conflates *this source may name this value* with *this value may
+> appear in this position*. For a path those coincide. For an egress URL they do
+> not: a path segment is content leaving the building.
+
+### Is the thesis disproven?
+
+**No, and this milestone is the first in a while that is straightforwardly good
+news** — which is exactly when to be careful. What was actually demonstrated is
+narrow: one mechanism extended to one more value grammar, priced over six
+hand-written cases, shipping off by default. The AgentDojo curve has not moved.
+Nobody is using any of it.
+
+The genuinely valuable part is the hole, and it is not a credit to the review
+process: it was found because a *different* server had an egress tool. Nothing
+about reading ADR-0012 would have surfaced it, and I had read ADR-0012 several
+times while writing the entries above.
+
+### What should happen next
+
+1. **`git_remote` and ARNs stay excluded until measured.** They are one line of
+   code away and that is exactly the reason to be suspicious of adding them.
+2. ~~**Price the escalation.**~~ Done in this milestone rather than deferred:
+   `idensec.lint` now reports `composition-without-egress-guard` when
+   composition is on, a contract can egress, and `confidential_egress` is set to
+   ALLOW — the combination that is defensible setting by setting and unsound
+   together. The proxy runs it at startup.
+3. **Users.** Unchanged, and now the oldest item in this document.
+
+### The strongest criticism, updated again
+
+> *"Every one of your mechanisms has turned out to have a hole that only showed
+> up when someone pointed it at software you had not tried. How many servers are
+> you away from the next one?"*
+
+Unknown, and the honest answer is that the number is not obviously large. Three
+servers have each produced a defect the previous two could not: filesystem found
+constructed paths, memory found mixed-role parameters, git found U08 and a
+scoring bug, and an egress tool that exists in none of them found this one. The
+pattern is not converging — each new *shape* of tool finds something, and there
+are more shapes than servers.
+
+The defence is that all four were found, published with the failing
+configurations beside the working ones, and regression-tested. That is a process
+that surfaces its own errors. It is not evidence that the surface is small.
+
+---
+
 ## 2026-09-16 — the grant did not say what we thought it said
 
 The previous entry recorded U08: a field-path grant asserts something about data

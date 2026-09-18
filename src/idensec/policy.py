@@ -167,6 +167,29 @@ class Policy:
     not get wrong.
     """
 
+    compose_urls: bool = False
+    """Admit a **URL** the agent built, component by component, like a path.
+
+    Off by default and separate from ``compose_paths`` on purpose: a URL's
+    components are an egress *destination*, so a wrong answer costs more than a
+    wrong answer on a filename. An operator should be able to take one without
+    the other.
+
+    It buys a case that is otherwise refused outright: the principal names a
+    host, the agent joins the endpoint, and the resulting string is one nobody
+    ever emitted. Measured over six cases in
+    ``benchmarks/url_composition.py`` -- the principal's own post, an injected
+    host, exfiltration by query string, exfiltration by path segment, a
+    lookalike host and userinfo confusion -- it gets all six right, and the
+    lookalike and userinfo cases are refused for a structural reason rather than
+    a lucky one: the whole host string is never a *token* of any source, because
+    ``/``, ``:`` and ``@`` are identifier characters, so a host nobody wrote
+    cannot be quoted.
+
+    **Six cases is a floor, not a proof**, and this ships off by default for
+    that reason as much as any other.
+    """
+
     denial_budget: int = 3
     """Denials tolerated before the session halts.
 

@@ -34,6 +34,7 @@ from idensec import (
     ToolContract,
     Trust,
 )
+from idensec.decision import Verdict
 
 ROOT = "/srv/notes"
 
@@ -264,3 +265,52 @@ class TestAttacksOnComposition:
         assert admit(3, "payroll")
         assert not admit(8, "payroll")
         assert admit(8, "brief.md")
+
+
+def test_a_composed_path_is_not_principal_directed_on_one_component() -> None:
+    """An egress hole that lived in this mechanism until URLs were measured.
+
+    Composition merges the origins of both halves, and ``principal_directed()``
+    was existential -- so a path built from a root the principal named and a
+    leaf from a confidential source came back principal-chosen, which skipped
+    the egress rules entirely. The call was admitted with **no findings at all**.
+
+    It never bit because the server this mechanism was built against exposes no
+    egress tool. That is not a defence; it is why it took a different server to
+    find it.
+    """
+    upload = ToolContract(
+        tool="upload",
+        parameters={
+            "path": ParameterContract(
+                "path", Role.AUTHORITY, frozenset({"posix_path", UNCLASSIFIED})
+            )
+        },
+        effects=frozenset({Effect.NETWORK_EGRESS, Effect.READ}),
+    )
+    made = Session(
+        contracts=[upload],
+        sources=[
+            Source(
+                id="principal",
+                trust=Trust.USER_INPUT,
+                sensitivity=Sensitivity.INTERNAL,
+                authoritative_for=frozenset({"posix_path", UNCLASSIFIED}),
+            ),
+            Source(
+                id="hr",
+                trust=Trust.TOOL_TRUSTED,
+                sensitivity=Sensitivity.CONFIDENTIAL,
+                authoritative_for=frozenset({"posix_path", UNCLASSIFIED}),
+            ),
+        ],
+        policy=Policy(compose_paths=True, min_quotation_length=3, denial_budget=-1),
+    )
+    made.observe("principal", "Upload something from /srv/share please.")
+    made.observe("hr", "Salary review is in payroll-2026-confidential.csv")
+
+    decision = made.admit(
+        "upload", {"path": "/srv/share/payroll-2026-confidential.csv"}
+    )
+    assert decision.verdict is not Verdict.ALLOW
+    assert "confidential_egress" in [f.code.value for f in decision.findings]

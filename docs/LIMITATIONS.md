@@ -221,6 +221,19 @@ alone; an entity id does not, and *"open the oldest file"* names nothing to
 split. So this converts the case where the principal named a **component**, and
 nothing else. It does not generalise to §4.1.
 
+**It generalises to URLs, and doing so found a hole in it.** `Policy.compose_urls`
+(ADR-0013) applies the same prefix/remainder split to an egress destination.
+Building it exposed that `principal_directed()` was *existential* while
+composition *merges origins* — so a path built from a principal's root and a
+confidential leaf counted as principal-chosen and skipped `confidential_egress`
+entirely, returning ALLOW with no findings. Live in `compose_paths` as shipped;
+it had never bitten because the filesystem server has no egress tool.
+`principal_directed()` is now universal for composed values. The residue is that
+the exfiltration case is caught by **escalation**, not denial: set
+`confidential_egress` to ALLOW and composition hands it through — which
+`idensec.lint` now reports as `composition-without-egress-guard`, because
+each of those three settings is defensible alone.
+
 **It also inherits §4.2b per component, and that is the honest way to describe
 its weakness.** Ten attacks on the decomposition were tried; nine are refused by
 construction — absolute leaves, encoded traversals, dot segments, trees nobody

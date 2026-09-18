@@ -176,9 +176,15 @@ class ProxyConfig:
         because a short id is "quoted" by any instruction containing that token.
         docs/BENCHMARKS.md sweeps them together.
         """
-        compose = data.get("compose_paths", policy.compose_paths)
-        if not isinstance(compose, bool):
-            raise ConfigError("compose_paths must be true or false")
+
+        def _flag(key: str, fallback: bool) -> bool:
+            value = data.get(key, fallback)
+            if not isinstance(value, bool):
+                raise ConfigError(f"{key} must be true or false")
+            return value
+
+        compose = _flag("compose_paths", policy.compose_paths)
+        compose_urls = _flag("compose_urls", policy.compose_urls)
 
         def _positive(key: str, fallback: int) -> int:
             if key not in data:
@@ -197,6 +203,7 @@ class ProxyConfig:
                 "min_reference_word", policy.min_reference_word
             ),
             compose_paths=compose,
+            compose_urls=compose_urls,
         )
 
     @staticmethod

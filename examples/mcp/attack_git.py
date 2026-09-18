@@ -114,14 +114,14 @@ class Proxy:
             text=True,
             bufsize=1,
             cwd=ROOT,
-            env={
-                "PYTHONPATH": str(ROOT / "src"),
-                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                # The real HOME, so uvx reuses its package cache instead of
-                # re-fetching the server -- and does not write one into the
-                # project directory, which an earlier version of this did.
-                "HOME": os.environ.get("HOME", "/root"),
-            },
+            # The ambient environment, with PYTHONPATH pointed at this
+            # checkout. Hand-building an env of PATH and HOME was not enough:
+            # uvx needs more than that to resolve a package, and the failure
+            # mode is a server that never starts and a handshake that times
+            # out. HOME matters too, as the package cache lives under it -- but
+            # it is inherited here rather than named, along with everything
+            # else the launcher needs and this example should not have to know.
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
         )
         self._lines: queue.Queue[str | None] = queue.Queue()
         threading.Thread(target=self._pump, daemon=True).start()

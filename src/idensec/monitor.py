@@ -771,6 +771,10 @@ class Session:
         )
 
     _PATH_KINDS = frozenset({"posix_path", "windows_path", "unc_path"})
+    _URL_KINDS = frozenset({"url"})
+    """Only ``url``. ``git_remote`` has a different grammar -- ``git@host:path``
+    splits at a colon, not a slash -- and claiming it composes without measuring
+    it would be a guess wearing a mechanism's clothes."""
 
     def _or_composed(self, value: str, attribution: Attribution) -> Attribution:
         """Fall back to composition when the whole value will not stand up.
@@ -782,7 +786,9 @@ class Session:
         is not authoritative for. Running composition only on the unattributed
         path meant it never fired against a real server at all.
         """
-        if not self.policy.compose_paths or attribution.composed:
+        if attribution.composed or not (
+            self.policy.compose_paths or self.policy.compose_urls
+        ):
             # Checked first: classifying the value costs a pass over every
             # registered kind's pattern, and this runs on every attributed leaf
             # of every call. A deployment that has not opted in should pay
@@ -815,9 +821,18 @@ class Session:
         Returns ``None`` when composition does not apply, so the caller falls
         through to the ordinary answer.
         """
-        if not self.policy.compose_paths or "/" not in value:
+        if "/" not in value:
             return None
-        if classify(value, self._kinds) not in self._PATH_KINDS:
+        kind = classify(value, self._kinds)
+        if kind in self._PATH_KINDS:
+            is_url = False
+            if not self.policy.compose_paths:
+                return None
+        elif kind in self._URL_KINDS:
+            is_url = True
+            if not self.policy.compose_urls:
+                return None
+        else:
             return None
         if ".." in value.split("/"):
             # A prefix and a traversal can each be attributable while their join
@@ -828,6 +843,12 @@ class Session:
                 continue
             prefix, remainder = value[:index], value[index + 1 :]
             if not remainder:
+                continue
+            if is_url and (prefix.endswith(":") or prefix.endswith("/")):
+                # Still inside the scheme's own "://". These splits cannot match
+                # anything -- "https:" is never a whole token, since "/" is an
+                # identifier character -- but skipping them says so out loud
+                # rather than relying on it.
                 continue
             left = self._authorised_component(prefix)
             if left is None:

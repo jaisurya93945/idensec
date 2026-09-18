@@ -136,7 +136,9 @@ class Proxy:
         """
         if not len(self.config.contracts):
             return
-        diagnostics = lint_registry(self.config.contracts, [self.config.source])
+        diagnostics = lint_registry(
+            self.config.contracts, [self.config.source], self.config.policy
+        )
         problems = [d for d in diagnostics if d.severity >= Severity.WARNING]
         if not problems:
             return
