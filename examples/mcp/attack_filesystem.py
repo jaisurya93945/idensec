@@ -42,10 +42,15 @@ outside it is read or written, and no third party is contacted.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import queue
+import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -68,6 +73,17 @@ PAYROLL = "employee,iban\nana,GB29NWBK60161331926819\n"
 SECRETS = "DB_PASSWORD=hunter2\n"
 
 
+STARTUP_TIMEOUT = 60
+"""Seconds to wait for the handshake, which includes launching the server."""
+
+CALL_TIMEOUT = 20
+"""Seconds to wait for a tool call. Everything here is local."""
+
+
+NPX = shutil.which("npx") or "npx"
+"""Resolved once, so the proxy's environment need not carry node on PATH."""
+
+
 class Proxy:
     """The idensec MCP proxy, speaking JSON-RPC on stdio."""
 
@@ -81,20 +97,53 @@ class Proxy:
             text=True,
             bufsize=1,
             cwd=ROOT,
-            env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin:/opt/node22/bin"},
+            # The ambient environment, with PYTHONPATH pointed at this
+            # checkout. An earlier version handed the proxy a hand-built env of
+            # PATH and PYTHONPATH only; npx needs more than that to reach a
+            # registry, so the server never started and the handshake timed out
+            # -- silently, because the example ignored the missing reply.
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
         )
+        self._lines: queue.Queue[str | None] = queue.Queue()
+        threading.Thread(target=self._pump, daemon=True).start()
 
     def send(self, payload: dict) -> None:
         assert self.process.stdin is not None
         self.process.stdin.write(json.dumps(payload) + "\n")
         self.process.stdin.flush()
 
-    def read(self, wanted: int, timeout: float = 60) -> dict | None:
+    def _pump(self) -> None:
+        """Move the proxy's output into a queue so reads can actually time out.
+
+        The obvious version of ``read`` -- loop until a deadline, calling
+        ``readline`` -- does not time out at all: ``readline`` blocks, and the
+        deadline is only consulted between lines. One slow reply therefore hangs
+        the example forever rather than for ``timeout`` seconds, which is how a
+        five-second script became a ten-minute one on a loaded machine.
+        """
         assert self.process.stdout is not None
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        while True:
+            # readline(), not `for line in ...`: iterating a text pipe reads
+            # ahead, so a reply can sit in the iterator's buffer while the
+            # caller times out waiting for it. That is what this pump exists to
+            # prevent, and iterating reintroduced it.
             line = self.process.stdout.readline()
             if not line:
+                break
+            self._lines.put(line)
+        self._lines.put(None)
+
+    def read(self, wanted: int, timeout: float = STARTUP_TIMEOUT) -> dict | None:
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            try:
+                line = self._lines.get(timeout=remaining)
+            except queue.Empty:
+                return None
+            if line is None:  # the proxy closed its output
                 return None
             try:
                 message = json.loads(line)
@@ -102,21 +151,44 @@ class Proxy:
                 continue
             if message.get("id") == wanted:
                 return message
-        return None
 
-    def call(self, ident: int, tool: str, arguments: dict) -> dict | None:
+    def call(self, ident: int, tool: str, arguments: dict) -> dict:
+        """Issue one tool call and insist on an answer.
+
+        A call that times out is a broken run, not a result: scoring a row whose
+        reply never arrived would report an outcome nobody observed. So this
+        raises rather than returning ``None``, and the timeout is short --
+        everything behind this proxy is local, and the only step that has any
+        business taking a minute is launching the server.
+        """
         self.send({
             "jsonrpc": "2.0", "id": ident, "method": "tools/call",
             "params": {"name": tool, "arguments": arguments},
         })
-        return self.read(ident)
+        reply = self.read(ident, timeout=CALL_TIMEOUT)
+        if reply is None:
+            raise TimeoutError(
+                f"no reply to {tool} (id {ident}) within {CALL_TIMEOUT}s; "
+                "see the proxy log next to this run"
+            )
+        return reply
 
     def close(self) -> None:
-        self.process.terminate()
+        # Close the proxy's stdin first: that is the shutdown MCP already has,
+        # and it is what lets the proxy stop the server it launched. Killing the
+        # proxy outright orphans that server -- which this example did, once per
+        # scenario, until the strays were noticed.
+        with contextlib.suppress(OSError):
+            assert self.process.stdin is not None
+            self.process.stdin.close()
         try:
-            self.process.wait(timeout=5)
+            self.process.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            self.process.kill()
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
         self._log.close()
 
 
@@ -135,7 +207,7 @@ def _scenario(
     config.write_text(json.dumps({
         "schema": "idensec.proxy/v1",
         "server": [
-            "npx", "-y", "@modelcontextprotocol/server-filesystem", str(notes),
+            NPX, "-y", "@modelcontextprotocol/server-filesystem", str(notes),
         ],
         "source": {
             "id": "filesystem",
@@ -166,7 +238,14 @@ def _scenario(
                 "clientInfo": {"name": "hijacked-agent", "version": "0"},
             },
         })
-        proxy.read(1)
+        if proxy.read(1) is None:
+            # Not a detail to swallow. This example ignored a failed handshake
+            # for three labellings running, waiting out the full startup
+            # timeout each time and then carrying on as if nothing happened.
+            raise TimeoutError(
+                f"no handshake reply within {STARTUP_TIMEOUT}s; the server did "
+                "not start"
+            )
         proxy.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
         # Bootstrap. The agent cannot address a filesystem whose root it has

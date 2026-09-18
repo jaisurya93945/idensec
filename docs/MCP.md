@@ -185,9 +185,34 @@ poisoned source comment asked for. See
 > values appearing under that path are ones your principal would endorse, and
 > whether that holds is decided by data, not by the policy. The git grant above
 > is safe only while `.gitignore` keeps secrets out of `git_status`; on a
-> repository without that line the same policy stages a deploy token. The linter
-> cannot catch this — at lint time there is no data — and the audit log only
-> shows it after the call. [`LIMITATIONS.md`](LIMITATIONS.md) §4.2g.
+> repository without that line the same policy stages a deploy token.
+> [`LIMITATIONS.md`](LIMITATIONS.md) §4.2g.
+
+### See what a grant admits, before it enforces
+
+```
+python -m idensec.preview --config docs.json --corpus captured.json --server git
+```
+
+The preview observes captured tool output through the real read boundary and
+then asks `Session.admit` about every value in it, giving the principal no words
+— so everything it reports is admitted by **the grant alone**. Run it against
+output from your own servers before you trust a grant.
+
+Two things it will tell you that the config file does not:
+
+- **`unclassified` is not a grant over identifiers.** It covers every token the
+  tool emits — its prose, and the `"type": "text"` label MCP wraps results in.
+  Measured on six published servers: a `**` grant admits **99%** of every token
+  in the corpus; the same grant scoped to one tool admits 3%. `idensec.lint`
+  reports the blanket shape as `blanket-unclassified-grant`.
+- **A grant can be inert and look configured.** `git_status.**: ["posix_path"]`
+  admits nothing at all, because git reports repo-relative names and
+  `posix_path` needs a leading separator. `Preview.inert_grants` names any grant
+  that admitted nothing in the corpus.
+
+It is a **lower bound**: single tokens and recognised operands only, so
+multi-token quotations are not counted.
 
 Both numeric knobs trade security against utility, neither has a defensible
 universal value, and they interact — reference binding is meaningless below a
@@ -259,6 +284,19 @@ descriptions, an over-trusted source. Every one of those is something an
 operator would otherwise discover during an incident.
 
 ---
+
+## Shutting it down
+
+Close the proxy's stdin. That is the shutdown MCP already has, and it is the one
+the proxy can act on: it closes the server's stdin in turn, and escalates to
+`terminate` and then `kill` if the server does not take the hint.
+
+`SIGTERM` and `SIGHUP` are handled for the same reason — their default action
+kills the proxy outright, which skips the cleanup and leaves the server it
+launched running. A leaked server outlives the session that authorised it, and
+one holding a repository, a database or a port blocks the next one.
+
+Do not `SIGKILL` the proxy. Nothing can clean up after that, by design.
 
 ## What this does not protect
 

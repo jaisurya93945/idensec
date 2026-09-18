@@ -308,6 +308,15 @@ def _lint_parameter(
     return found
 
 
+def _matches_everything(pattern: str) -> bool:
+    """Whether a grant pattern covers every field of every result.
+
+    ``**`` and a bare empty prefix are the two spellings; ``**.**`` and friends
+    are the same thing written twice.
+    """
+    return pattern == "" or set(pattern.split(".")) <= {"**"}
+
+
 def lint_sources(
     sources: Iterable[Source], registry: ContractRegistry
 ) -> list[Diagnostic]:
@@ -350,6 +359,35 @@ def lint_sources(
                         "parameter declares a collection under that path. Reference "
                         "binding will never fire, so the grant denies everything the "
                         "path would otherwise have allowed.",
+                    )
+                )
+        if UNCLASSIFIED in source.authoritative_for:
+            found.append(
+                Diagnostic(
+                    Severity.WARNING,
+                    "blanket-unclassified-grant",
+                    source.id,
+                    f"authoritative for {UNCLASSIFIED!r} across the whole source. "
+                    "That is not authority over its identifiers, it is authority "
+                    "over every token it emits -- its prose included. Scope it to "
+                    "a field path, and run 'python -m idensec.preview' against "
+                    "captured output to see what the grant actually admits.",
+                )
+            )
+        for prefix, kinds in source.authoritative_paths:
+            if UNCLASSIFIED in kinds and _matches_everything(prefix):
+                found.append(
+                    Diagnostic(
+                        Severity.WARNING,
+                        "blanket-unclassified-grant",
+                        source.id,
+                        f"grants {UNCLASSIFIED!r} at {prefix!r}, which covers every "
+                        "field of every result. Measured against captured output "
+                        "from a real server, a grant of this shape made 99% of "
+                        "candidate values authoritative, most of them ordinary "
+                        "words from the tool's own prose. Scope it to the tools "
+                        "whose output names things, and check it with "
+                        "'python -m idensec.preview'.",
                     )
                 )
         for kind in sorted(source.authoritative_for):

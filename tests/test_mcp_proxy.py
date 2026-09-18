@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from idensec.mcp.config import ConfigError, ProxyConfig
+from idensec.mcp.proxy import _shut_down
 from idensec.policy import STRICT
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -674,3 +675,110 @@ class TestConfigurableGrants:
             ProxyConfig.from_dict(
                 self._config(authoritative_paths=grants), base=tmp_path
             )
+
+
+class TestServerShutdown:
+    """The proxy owns the process it launched, including ending it.
+
+    A proxy that leaks its server outlives the session that authorised it, and
+    on a server holding a lock -- a repository, a database, a port -- blocks the
+    next one. Found in the wild: an example launched four proxies in a row and
+    orphaned an ``mcp-server-git`` each time, still pointed at a temporary
+    directory that had already been deleted.
+    """
+
+    @staticmethod
+    def _stubborn() -> subprocess.Popen[bytes]:
+        """A server that ignores a closed stdin, which real ones sometimes do."""
+        return subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(120)"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def test_a_server_that_ignores_stdin_is_still_ended(self) -> None:
+        server = self._stubborn()
+        try:
+            started = time.monotonic()
+            _shut_down(server, grace=0.2)
+            assert server.poll() is not None, "server survived shutdown"
+            # Politeness has a deadline: stdin close, then terminate, then kill.
+            assert time.monotonic() - started < 15
+        finally:
+            if server.poll() is None:  # pragma: no cover - only on failure
+                server.kill()
+                server.wait(timeout=5)
+
+    def test_a_cooperative_server_is_not_killed(self) -> None:
+        """The escalation must not fire on a server that exits on its own."""
+        server = subprocess.Popen(
+            [sys.executable, "-c", "import sys; sys.stdin.read()"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        _shut_down(server, grace=5)
+        assert server.returncode == 0, "a clean exit was turned into a kill"
+
+    def test_shutdown_is_idempotent(self) -> None:
+        server = self._stubborn()
+        _shut_down(server, grace=0.2)
+        _shut_down(server, grace=0.2)  # must not raise on an already-dead child
+        assert server.poll() is not None
+
+    def test_the_proxy_leaves_no_child_behind(self, tmp_path: Path) -> None:
+        """End to end: close the proxy's stdin, and its server is gone too."""
+        contracts = tmp_path / "contracts.json"
+        contracts.write_text(json.dumps({"schema": "idensec.contracts/v1",
+                                         "contracts": []}), encoding="utf-8")
+        config = tmp_path / "proxy.json"
+        config.write_text(json.dumps({
+            "schema": "idensec.proxy/v1",
+            "source": {"id": "s", "trust": "tool_untrusted"},
+            "policy": "strict",
+            "contracts": str(contracts),
+            # Ignores stdin, so only the escalation can end it.
+            "server": [sys.executable, "-c", "import time; time.sleep(120)"],
+        }), encoding="utf-8")
+
+        process = subprocess.Popen(  # noqa: S603 - fixed test command
+            [sys.executable, "-m", "idensec.mcp", "--config", str(config)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            cwd=ROOT,
+            env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"},
+        )
+        assert process.stdin is not None
+        children = _descendants(process.pid)
+        process.stdin.close()
+        process.wait(timeout=40)
+        for pid in children:
+            assert not _alive(pid), f"server {pid} outlived the proxy"
+
+
+def _descendants(pid: int) -> list[int]:
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        found = [
+            int(child)
+            for child in Path(f"/proc/{pid}/task/{pid}/children").read_text().split()
+        ]
+        if found:
+            return found
+        time.sleep(0.05)
+    raise AssertionError("proxy never launched a server")
+
+
+def _alive(pid: int) -> bool:
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text().split(") ", 1)[1][0]
+        except (FileNotFoundError, ProcessLookupError, IndexError):
+            return False
+        if state == "Z":  # reaped by its parent's exit, not running
+            return False
+        time.sleep(0.05)
+    return True

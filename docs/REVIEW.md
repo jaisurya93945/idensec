@@ -6,6 +6,92 @@ comfortable, it was written badly.
 
 ---
 
+## 2026-09-16 — the grant did not say what we thought it said
+
+The previous entry recorded U08: a field-path grant asserts something about data
+the operator never sees, and `idensec.lint` cannot check it because at lint time
+there is no data. The obvious response was to supply the data, so
+`idensec.preview` now observes a corpus of real tool output and asks the **real**
+`Session.admit` what the grants would admit.
+
+It found something on its first run.
+
+### `unclassified` means something much larger than it reads
+
+| grant on `mcp-server-git` | admitted, of 1489 tokens | bare English words |
+| --- | ---: | ---: |
+| `git_status.**: [posix_path]` | 0 | 0 |
+| `git_status.**: [posix_path, unclassified]` | 48 | 28 |
+| `**: [posix_path, unclassified]` | **1475 (99%)** | 793 |
+
+An `unclassified` grant is not authority over the identifiers a tool returns. It
+is authority over **every token the tool emits** — its prose, and the
+`{"type": "text"}` label MCP wraps results in. More than half the values the
+*scoped* grant admits are words like `Changes`, `add`, `branch` and `discard`.
+
+This was always what the code did. Nobody had looked, and the config file reads
+like a grant over paths.
+
+### And the safest-looking grant does nothing at all
+
+`git_status.**: ["posix_path"]` admits **zero** values: `posix_path` needs a
+leading separator and git reports repo-relative names. The narrow, kind-scoped
+grant an operator would reach for first fails closed silently while they believe
+they configured something. That is the worse failure of the two — an
+over-permissive grant at least leaves a trail.
+
+### Is the thesis disproven?
+
+**No, and this is the first milestone that made a published number look better
+rather than worse — which is a reason for suspicion, not comfort.** The honest
+summary is narrower: a tool that reports a grant's surface is a usability and
+review improvement, not a security result. U08 is unchanged. The preview reports
+what a grant admits against *a* corpus; the repository it meets in production is
+a different one.
+
+What did change is the *quality of the argument for scoping*. "Scope your
+grants" was advice. It is now a measured 99% → 3%, on software we did not write.
+
+### One thing was closed by being rejected
+
+The containment form of U08 — a grant that declares the operand shape it expects
+and refuses a surprise — is now in **Not planned**, with the reason. It fails on
+its own motivating case: the expected shape under `git_status` is *a
+repo-relative path*, and `.env` is a repo-relative path. What separates the
+secret from the changelog is sensitivity, which is semantic, so the mechanism
+collapses into the prompt-injection classifier this project refuses to build.
+
+Writing that down is worth more than leaving it as a roadmap item nobody priced.
+
+### The strongest criticism, updated again
+
+> *"Three milestones running, the defect was in what you could see, not in what
+> the code did. That is not a mechanism you have validated — it is a mechanism
+> you keep failing to observe."*
+
+That is the correct reading and I will not soften it. A dangerous miss found by
+a number moving the wrong way; a scoring bug that credited us with git's
+defence; a grant whose plain reading understated its surface by two orders of
+magnitude. None was in the enforcement path. All three were in the view of it.
+
+A fourth arrived while writing this entry, and it is the least flattering.
+Timing the examples showed two of the three had **never completed an MCP
+handshake**: they waited out a 60-second timeout three times per run, discarded
+the missing reply without checking it, and carried on. That had been true in CI
+through three milestones whose results this repository reported approvingly.
+The measured outcomes turn out to be unaffected — the servers did start, late,
+and every call in the published tables was really made — but nobody noticed six
+minutes of dead time, which is not a defence of the process, it is the
+indictment.
+
+The defence — such as it is — is that a design nobody can inspect is not
+deployable regardless of whether it is sound, so the view *is* part of the
+product. But it does mean this project's claim to have measured itself carefully
+should be read as *measured itself repeatedly*, which is a different and weaker
+thing.
+
+---
+
 ## 2026-09-14 — the first user we guessed at, and a result we had to take back
 
 [`ROADMAP.md`](ROADMAP.md) has named the same first user since the project

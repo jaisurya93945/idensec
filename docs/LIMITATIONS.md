@@ -287,11 +287,34 @@ This is not the same as §4.2b or §4.1. Those are limits on what provenance can
 a grant that is correct on Monday's repository and wrong on Tuesday's, with no
 diff in between. Recorded as **U08** in [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
-There is no mitigation in this release. The nearest honest one is monitoring
-rather than prevention: the audit log records the field path that authorised
-every admitted value, so a grant that starts authorising a new *kind* of value
-is visible after the fact. That is detection, not containment, and it should be
-read as an admission.
+**Partially mitigated, in the weaker direction.** `python -m idensec.preview`
+observes a corpus of real tool output through the read boundary and reports
+every value the grants would make authoritative — by asking the real
+`Session.admit`, not by reimplementing it. An operator can now see a grant's
+surface *before* enforcing it rather than reading it out of the audit log
+afterwards, and the first run of that tool found something nobody had stated:
+**an `unclassified` grant is not authority over a tool's identifiers, it is
+authority over every token the tool emits**, its prose and the MCP content-type
+label included — 99% of the corpus for a `**` grant, 3% for a tool-scoped one.
+See [`BENCHMARKS.md`](BENCHMARKS.md). `idensec.lint` now reports the blanket
+shape (`blanket-unclassified-grant`), which needs no data.
+
+This does not close U08. The preview reports what a grant admits against *a*
+corpus; production is a different one. It moves detection earlier, and that is
+all. The containment version — letting a grant declare the operand *shape* it
+expects and refuse a surprise — is **not planned**, because it fails on the case
+that motivates it: the expected shape under `git_status` is *a repo-relative
+path*, and `.env` is a repo-relative path. What separates the secret from the
+changelog is sensitivity, which is semantic, and a semantic check with an
+attacker-searchable error rate is a classifier.
+
+A second, opposite failure the preview exposed is worth stating here because it
+is the more likely one in practice: **a grant can be inert and look configured.**
+`git_status.**: ["posix_path"]` admits nothing at all on this server, because
+git reports repo-relative names and `posix_path` requires a leading separator.
+A grant that admits too much is at least doing something an audit log will show.
+A grant that admits nothing is indistinguishable from one that works, until the
+denials start.
 
 ### 4.3 Extraction coverage is a security parameter
 
@@ -343,9 +366,10 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | **Audit is integrity, not authenticity** | A hash chain proves the log was not altered. It does not prove IDENSEC wrote it. An attacker with write access can rewrite the chain from genesis; ship records off-host if that is in your threat model. |
 | **MCP needs an out-of-band task channel** | The protocol has nowhere to carry the principal's instruction, and the agent cannot be asked for it without creating a total bypass. The proxy reads it from a host-written file; a host that cannot provide one gets no trusted corpus and should run in observe mode rather than claim enforcement. See [`MCP.md`](MCP.md). |
 | **stdio transport only** | The proxy does not yet speak streamable HTTP. Framework adapters are roadmap, not code. |
+| **The proxy owns its server's lifetime, and had to be taught to** | Closing the proxy's stdin is the shutdown MCP already has, and the proxy then ends the server it launched — stdin close, then `terminate`, then `kill`. Killing the proxy outright instead skips that, so `SIGTERM` and `SIGHUP` are handled rather than left to their default action. Before this, a host that stopped the proxy left the server running; on a server holding a repository, database or port, that blocks the next one. Found by an example that orphaned an `mcp-server-git` per run. |
 | **A parameter whose sub-fields have different roles must say so** | `create_entities(entities)` takes `[{name, entityType, observations}]`: the name is authority, the note is content. `ParameterContract.payload_paths` names the exemptions, one at a time, on a parameter that stays `AUTHORITY`. Forgetting one costs a denial; the opposite arrangement would make forgetting one a bypass. It is another per-API declaration, and `idensec.lint` reports a writing tool where nothing bears authority. |
 | **Reference binding needs a collection per parameter, and real servers do not supply one** | `ParameterContract.collection` says which directory an id addresses. `derive_contract` drafts it from `<noun>_id` names — which fires on **2 of 60** authority parameters across seven published MCP servers, because they name things `path`, `repo_path` and `branch_name`. Against those servers every collection is hand-authored or reference binding never runs. A wrong draft costs a denial; an absent one makes the grant inert, which `idensec.lint` reports. |
-| **A field-path grant's security is decided by data** | Scoping authority by path assumes the values under that path are ones the principal would endorse, and that is a property of the data rather than of the policy. On `mcp-server-git` the grant that works depends on `.gitignore` keeping secrets out of `git_status`. No configuration-time check exists, and the audit log shows it only after the call. §4.2g, U08. |
+| **A field-path grant's security is decided by data** | Scoping authority by path assumes the values under that path are ones the principal would endorse, and that is a property of the data rather than of the policy. On `mcp-server-git` the grant that works depends on `.gitignore` keeping secrets out of `git_status`. `python -m idensec.preview` shows a grant's surface against captured output before enforcement, and `idensec.lint` catches the blanket shape; neither closes it. §4.2g, U08. |
 | **Effect hints are read from the server, one way only** | MCP tool annotations come from the bottom of the integrity lattice. Hints that *restrict* (`destructiveHint`, `openWorldHint`) are believed; `readOnlyHint` is ignored, because believing it would disable the confidentiality rules — and 32 of 52 real tools claim it. This never reduces the operator's obligation to declare effects. |
 
 ---

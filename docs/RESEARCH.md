@@ -1029,6 +1029,110 @@ the root the agent is pointed at.
 
 ---
 
+## Thread 3o — What a grant actually says (2026-09-16)
+
+`EXPERIMENT` — U08 (Thread 3n) said a field-path grant asserts something about
+data the operator never sees. Rather than leave that as a caveat, built
+``idensec.preview``: observe a corpus of real tool output through the read
+boundary, then ask the **real** ``Session.admit`` about every candidate value.
+No reimplementation of the authority check — a preview that disagreed with the
+enforcer would be worse than none — and the principal is given **no words**, so
+everything reported is admitted by the grant alone.
+
+`RESULT` — **An ``unclassified`` grant is not a grant over identifiers.** It is
+a grant over every token the tool emits. Three shapes on ``mcp-server-git``,
+against the checked-in corpus, at quotation floor 3:
+
+| grant | admitted | of which bare words |
+| --- | ---: | ---: |
+| ``git_status.**: [posix_path]`` | 0 of 1489 | 0 |
+| ``git_status.**: [posix_path, unclassified]`` | 48 of 1489 | 28 |
+| ``**: [posix_path, unclassified]`` | **1475 of 1489** | 793 |
+
+`FACT` — 28 of the 48 values the *scoped* grant admits are ordinary English
+words out of git's own prose: ``Changes``, ``Untracked``, ``add``, ``branch``,
+``directory``, ``discard``. On the blanket row it is 793 of 1475.
+
+`FACT` — It also reaches the **protocol envelope**. ``text`` is admitted,
+because ``{"type": "text"}`` is part of the result the grant covers. An operator
+writing ``"**": ["unclassified"]`` believes they are saying *this server may
+name paths*. They are saying *this server may name anything it has ever said,
+including the word MCP uses to label a content block*.
+
+`RESULT` — **The safest-looking grant is inert.** ``git_status.**:
+["posix_path"]`` admits nothing at all: ``posix_path`` requires a leading ``/``,
+``./`` or ``~/`` and git reports repo-relative names. The narrow, kind-scoped
+grant an operator reaches for first fails closed silently while they believe
+they configured something.
+
+`INFERENCE` — That is the worse of the two failures in practice. A grant that
+admits too much is at least doing something an audit log will show; a grant that
+admits nothing is indistinguishable from one that works until the denials start.
+``Preview.inert_grants`` reports it. ``idensec.lint`` reports the opposite shape
+(``blanket-unclassified-grant``), which needs no data.
+
+`FACT` — **U08 is not closed by this.** The preview reports what a grant admits
+against *a* corpus; production is a different one. Detection moved earlier, and
+that is all it did.
+
+`RESULT` — The containment version was priced and **rejected**, not deferred.
+Letting a grant declare the operand *shape* it expects and refuse a surprise
+fails on the case that motivates it: the expected shape under ``git_status`` is
+*a repo-relative path*, and ``.env`` is a repo-relative path. What separates the
+secret from the changelog is sensitivity, which is semantic — so the mechanism
+collapses into the prompt-injection classifier this project refuses to build
+(Thread 4). Recorded in [`ROADMAP.md`](ROADMAP.md) under *Not planned*, with the
+reason, rather than as future work nobody priced.
+
+`RESULT` — **The proxy leaked the server it launched.** Not a provenance
+finding, but a deployment one, and it surfaced only because the git example
+launches four proxies in a row: each left an ``mcp-server-git`` running, still
+pointed at a temporary directory that had already been deleted. The proxy's
+cleanup was on the path where the *host* closes stdin; the example was
+``SIGTERM``-ing it instead, and ``SIGTERM``'s default action skips ``finally``.
+
+`FACT` — Both halves were wrong and both are fixed: the proxy now handles
+``SIGTERM`` and ``SIGHUP`` so its cleanup runs, and that cleanup escalates
+(stdin close, ``terminate``, ``kill``) rather than assuming a server exits when
+its stdin does. A leaked server outlives the session that authorised it, and one
+holding a repository, a database or a port blocks the next one. Four regression
+tests, one of them end to end through ``/proc``.
+
+`RESULT` — **Two of the three examples had never completed an MCP handshake.**
+Chasing the leak meant timing the examples, and the timing said the filesystem
+and memory runs spent exactly 60 seconds -- the startup timeout, to the
+millisecond -- waiting for a reply to ``initialize`` that never came, three
+times each. Three defects stacked, and each hid the next:
+
+* the examples handed the proxy a **hand-built environment** of ``PATH`` and
+  ``PYTHONPATH`` only. ``npx`` needs more than that to reach a registry, so the
+  server started late or not at all.
+* ``read`` **could not time out**. It looped until a deadline calling
+  ``readline``, which blocks -- so the deadline was consulted only between
+  lines, and one slow reply hung the run rather than ending it.
+* the handshake's reply was **discarded without being checked**, so a failure
+  that took a minute produced no output at all.
+
+`FACT` — Fixed, the three examples run in **2.6s, 2.5s and 3.3s** rather than
+212s, 213s and a hang. Their published results are **unchanged** -- the servers
+did eventually start, and every tool call in the tables was really made -- so
+nothing measured has to be retracted. What was wrong was the harness, again.
+
+`INFERENCE` — Worth stating plainly: a 60-second stall, repeated six times per
+CI run, sat in this repository through three milestones that reported those
+examples' results approvingly. Nobody looked at the clock. The general lesson is
+the same one as the scoring bug -- **a result that arrives is not evidence the
+thing you think produced it ran**.
+
+`INFERENCE` — The broader pattern, now three milestones old: **the thing that
+was wrong was what we could see, not what the mechanism did.** A dangerous miss
+found by a number moving the wrong way; a scoring bug that credited us with
+git's defence; and now a grant whose plain-language reading understated its
+surface by two orders of magnitude. None of the three was a bug in the
+enforcement path. All three were bugs in the view of it.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

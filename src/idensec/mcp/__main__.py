@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
+import signal
 import sys
 from pathlib import Path
+from types import FrameType
 
 from .config import ConfigError, ProxyConfig
 from .proxy import run
@@ -48,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.emit_contracts is not None:
         config = dataclasses.replace(config, emit_contracts=args.emit_contracts)
 
+    _exit_cleanly_on_signal()
+
     try:
         return run(config)
     except ValueError as exc:
@@ -55,6 +60,25 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except KeyboardInterrupt:
         return 130
+
+
+def _exit_cleanly_on_signal() -> None:
+    """Turn SIGTERM and SIGHUP into an ordinary exit.
+
+    Their default action kills this process outright, which skips the cleanup
+    that shuts the server down -- so a host that stops the proxy would leave the
+    server it launched running, holding whatever the server holds. Raising
+    SystemExit instead lets ``run``'s finally clause do its job.
+    """
+
+    def stop(signum: int, _frame: FrameType | None) -> None:
+        raise SystemExit(128 + signum)
+
+    for name in ("SIGTERM", "SIGHUP"):
+        received = getattr(signal, name, None)
+        if received is not None:
+            with contextlib.suppress(ValueError, OSError):
+                signal.signal(received, stop)
 
 
 if __name__ == "__main__":

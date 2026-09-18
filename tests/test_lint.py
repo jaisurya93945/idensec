@@ -28,7 +28,7 @@ from idensec.contracts import (
     ToolContract,
 )
 from idensec.kinds import REFERENCED, UNCLASSIFIED
-from idensec.labels import Source, Trust
+from idensec.labels import Sensitivity, Source, Trust
 from idensec.lint import Severity, lint_contract, lint_registry, lint_sources, render
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -431,3 +431,67 @@ class TestPseudoKindsAreNotTypos:
         )
         codes = {d.code for d in lint_contract(contract)}
         assert "unknown-operand-kind" in codes
+
+
+def test_a_blanket_unclassified_grant_is_reported() -> None:
+    """The shape that makes a server authoritative for everything it says.
+
+    Mechanically detectable without any data, unlike U08 in general, so the
+    linter should catch it even though it cannot catch the scoped case.
+    """
+    registry = ContractRegistry([
+        ToolContract(
+            tool="stage",
+            effects=frozenset({Effect.WRITE}),
+            parameters={"file": ParameterContract(name="file", role=Role.AUTHORITY)},
+        )
+    ])
+    source = Source(
+        id="repo",
+        trust=Trust.TOOL_UNTRUSTED,
+        sensitivity=Sensitivity.INTERNAL,
+        authoritative_paths=(("**", frozenset({UNCLASSIFIED})),),
+    )
+    codes = [d.code for d in lint_sources([source], registry)]
+    assert "blanket-unclassified-grant" in codes
+
+
+def test_a_scoped_unclassified_grant_is_not_reported() -> None:
+    """Scoping is the recommended fix, so it must not be flagged as the defect.
+
+    That this grant can still be wrong -- U08 -- is exactly what the linter
+    cannot see, and why `idensec.preview` exists.
+    """
+    registry = ContractRegistry([
+        ToolContract(
+            tool="stage",
+            effects=frozenset({Effect.WRITE}),
+            parameters={"file": ParameterContract(name="file", role=Role.AUTHORITY)},
+        )
+    ])
+    source = Source(
+        id="repo",
+        trust=Trust.TOOL_UNTRUSTED,
+        sensitivity=Sensitivity.INTERNAL,
+        authoritative_paths=(("git_status.**", frozenset({UNCLASSIFIED})),),
+    )
+    codes = [d.code for d in lint_sources([source], registry)]
+    assert "blanket-unclassified-grant" not in codes
+
+
+def test_a_whole_source_unclassified_grant_is_reported() -> None:
+    registry = ContractRegistry([
+        ToolContract(
+            tool="stage",
+            effects=frozenset({Effect.WRITE}),
+            parameters={"file": ParameterContract(name="file", role=Role.AUTHORITY)},
+        )
+    ])
+    source = Source(
+        id="repo",
+        trust=Trust.TOOL_UNTRUSTED,
+        sensitivity=Sensitivity.INTERNAL,
+        authoritative_for=frozenset({UNCLASSIFIED}),
+    )
+    codes = [d.code for d in lint_sources([source], registry)]
+    assert "blanket-unclassified-grant" in codes

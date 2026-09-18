@@ -1023,6 +1023,89 @@ way."*
 
 ---
 
+## What a grant actually admits (2026-09-16)
+
+U08 says a field-path grant's security is decided by data the policy file does
+not show. This measures the gap, against the checked-in corpus of responses
+captured from published servers.
+
+```
+python3 benchmarks/grant_surface.py
+python3 -m idensec.preview --config proxy.json --corpus results.json --server git
+```
+
+`idensec.preview` observes a corpus through the real read boundary and then asks
+`Session.admit` about every candidate value. It does not reimplement the
+authority check — a preview that disagreed with the enforcer would be worse than
+no preview — and it gives the principal **no words**, so everything it reports is
+admitted by the grant alone.
+
+Three grant shapes on `mcp-server-git`, at two quotation floors:
+
+| grant | floor 1 | floor 3 | |
+| --- | ---: | ---: | --- |
+| `git_status.**: [posix_path]` | 0 (0%) | **0 (0%)** | one tool, recognised paths only |
+| `git_status.**: [posix_path, unclassified]` | 57 (4%) | **48 (3%)** | one tool, any token it emits |
+| `**: [posix_path, unclassified]` | 1588 (99%) | **1475 (99%)** | every tool, any token it emits |
+
+Percentages are of every token the corpus contains.
+
+### An `unclassified` grant is not a grant over identifiers
+
+It is a grant over **every token the tool emits**. On the scoped row, 28 of the
+48 admitted values are bare English words out of git's own prose — `Changes`,
+`Untracked`, `add`, `branch`, `directory`, `discard`. On the blanket row it is
+793 of 1475.
+
+It also reaches the **protocol envelope**. `text` is admitted, because
+`{"type": "text"}` is part of the result the grant covers. An operator writing
+`"**": ["unclassified"]` is not saying *this server may name paths*; they are
+saying *this server may name anything it has ever said, including the word MCP
+uses to label a content block*.
+
+Nothing in the policy file says any of that. It took one command against
+captured output to see it.
+
+### The safest-looking grant is inert
+
+`git_status.**: ["posix_path"]` admits **nothing at all**. `posix_path` requires
+a leading `/`, `./` or `~/`, and git reports repo-relative names — `README.md`,
+`docs/BENCHMARKS.md`. So the narrow, kind-scoped grant an operator would reach
+for first fails closed silently, while they believe they configured something.
+
+That is the worse failure of the two on this table. A grant that admits too much
+is at least doing something the audit log will show; a grant that admits nothing
+looks identical to a grant that is working.
+
+`Preview.inert_grants` reports it, and `idensec.lint` now reports the opposite
+shape — `blanket-unclassified-grant`, a `**` or whole-source grant of
+`unclassified` — which is mechanically detectable without any data.
+
+### What this does and does not close
+
+**Closes:** the operator can now see a grant's surface *before* enforcing it,
+rather than reading it out of the audit log afterwards.
+
+**Does not close:** U08 itself. The preview reports what a grant admits against
+*a* corpus; the repository it meets in production is a different one. It moves
+detection earlier. It is not containment, and
+
+> a grant that could declare the operand *shape* it expects and refuse a surprise
+> would be containment — and it does not work on the case that motivates it. The
+> expected shape under `git_status` is *a repo-relative path*, and `.env` is a
+> repo-relative path. What separates the secret from the changelog is
+> sensitivity, which is semantic, and a semantic check with an
+> attacker-searchable error rate is a classifier.
+
+That is written down in [`ROADMAP.md`](ROADMAP.md) as the reason the containment
+version is not being built, rather than left as future work nobody priced.
+
+**A lower bound, twice over.** Candidates are single tokens and recognised
+operands, so multi-token quotations (`"Q3 budget"` is one) are not counted; and
+the corpus is what six servers happened to return on a handful of calls.
+
+---
+
 ## Method notes
 
 - One untimed warm-up call per measurement, so lazily compiled regexes and
@@ -1055,3 +1138,7 @@ way."*
 6. **A second benchmark.** Four suites with effect classes and field-path grants
    we authored ourselves is not a population, and optimising further against it
    measures our fit to it rather than the design.
+7. **Grant surface against a corpus we did not choose.** `grant_surface.py`
+   reports 99% for a blanket grant on six servers' captured output. Whether
+   that number is a property of those servers or of the grant shape needs
+   output we did not capture ourselves.

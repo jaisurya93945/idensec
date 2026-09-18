@@ -153,6 +153,31 @@ jobs:
           print(f"lossless; git output {density:.1%} sealed")
           PY
 
+      - name: A grant's surface is what we say it is
+        # The preview reports what authoritative_paths would admit. If it ever
+        # disagrees with the enforcer it is worse than nothing, so the unit
+        # tests check agreement and this checks the published numbers: the
+        # blanket grant admits essentially everything, the scoped one a small
+        # set, the kind-scoped one nothing at all on this server.
+        run: |
+          python benchmarks/grant_surface.py --json surface.json
+          python - <<'PY'
+          import json, sys
+          data = json.load(open("surface.json"))
+          rows = {r["shape"]: r["floors"]["3"] for r in data["shapes"]}
+          blanket = rows["blanket"]["admitted"] / rows["blanket"]["candidates"]
+          scoped = rows["tool-scoped"]["admitted"] / rows["tool-scoped"]["candidates"]
+          if blanket < 0.90:
+              sys.exit(f"blanket grant surface fell to {blanket:.0%}; recheck U08")
+          if scoped > 0.20:
+              sys.exit(f"tool-scoped grant admits {scoped:.0%}; scoping stopped working")
+          if rows["kind-scoped"]["admitted"]:
+              sys.exit("kind-scoped grant is no longer inert; the finding changed")
+          if not rows["tool-scoped"]["bare_words"]:
+              sys.exit("an unclassified grant no longer admits prose; recheck the claim")
+          print(f"blanket {blanket:.0%}, tool-scoped {scoped:.0%}, kind-scoped inert")
+          PY
+
       - name: Extraction coverage does not regress
         # Coverage is a security parameter; a pattern change that silently
         # drops recall should fail the build, not surface months later.

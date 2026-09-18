@@ -390,10 +390,41 @@ def run(
     except (BrokenPipeError, ValueError):
         pass
     finally:
-        with contextlib.suppress(OSError):
-            server.stdin.close()
-        server.wait(timeout=10)
+        _shut_down(server)
         reader.join(timeout=5)
         proxy.close()
 
     return server.returncode or 0
+
+
+def _shut_down(server: subprocess.Popen[bytes], *, grace: float = 10) -> None:
+    """End the server process, whatever it thinks about that.
+
+    Closing stdin is the polite request and most servers honour it. Some do not,
+    and one that does not is still our child: leaving it running outlives the
+    session that authorised it, and on a server holding a lock -- a repository,
+    a database, a port -- it blocks the next one. Escalate rather than hope.
+
+    Found by an example that launched four proxies in a row and orphaned a
+    ``mcp-server-git`` each time, still pointed at a temporary directory that
+    had already been deleted.
+
+    ``grace`` is how long a server gets to notice its stdin closed before the
+    escalation starts. It is a parameter so tests can exercise the escalation
+    without waiting out a production timeout; the default is the deployed value.
+    """
+    if server.stdin is not None:
+        with contextlib.suppress(OSError):
+            server.stdin.close()
+    for escalate, patience in (
+        (None, grace),
+        (server.terminate, 5),
+        (server.kill, 5),
+    ):
+        if escalate is not None:
+            escalate()
+        try:
+            server.wait(timeout=patience)
+            return
+        except subprocess.TimeoutExpired:
+            continue

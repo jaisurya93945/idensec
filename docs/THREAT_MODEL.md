@@ -390,10 +390,16 @@ is exactly the discrimination the mechanism exists for. It works because
 that line, `git_status` names the secret, the same grant makes it authoritative,
 and the token is staged and committed. Same policy, same tools, no diff.
 
-*Detectable?* Not at configuration time. `idensec.lint` reasons about contracts
-and has no data. The audit log records which field path authorised each admitted
-value, so a grant that begins authorising a new class of value is visible
-**after** the call — detection, not containment.
+*Detectable?* Partly, and only by supplying the data. `python -m idensec.preview`
+takes a corpus of real tool output and reports every value the grants would make
+authoritative, by asking the real `Session.admit`. It is how the shape of the
+problem became visible at all: a `**` grant of `unclassified` admitted **99%** of
+every token six published servers emitted, prose and protocol envelope included.
+`idensec.lint` catches that blanket shape without data
+(`blanket-unclassified-grant`). Neither closes the scoped case, which is the one
+U08 is about — the preview reports a grant's surface against *a* corpus, and
+production is a different one. The audit log remains the only signal after the
+call.
 
 *Relationship to U06.* U06 is the integrator labelling something wrongly. U08 is
 the integrator labelling something correctly for the data they inspected, and

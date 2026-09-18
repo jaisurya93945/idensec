@@ -335,6 +335,28 @@ cannot see from the policy file (U08, unmitigated):
 python3 examples/mcp/attack_git.py
 ```
 
+**See what a grant admits, before it enforces** — `authoritative_paths` is the
+setting that makes retrieve-then-act work and the one an operator can least
+check. `idensec.preview` observes captured tool output through the real read
+boundary and asks the real `admit()` what the grants would let through, with the
+principal given no words, so everything reported is admitted by the grant alone.
+On six published servers it says two things the config file does not:
+
+| grant on `mcp-server-git` | values it makes authoritative |
+| --- | ---: |
+| `git_status.**: [posix_path]` | 0 — **inert**, and looks configured |
+| `git_status.**: [posix_path, unclassified]` | 48 of 1489 (3%) |
+| `**: [posix_path, unclassified]` | 1475 of 1489 (**99%**) |
+
+An `unclassified` grant is not authority over a tool's identifiers. It is
+authority over every token the tool emits — its prose, and the `"type": "text"`
+label MCP wraps results in. And the narrow, kind-scoped grant an operator
+reaches for first admits *nothing*, because git reports repo-relative names:
+
+```
+python3 benchmarks/grant_surface.py
+```
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```
