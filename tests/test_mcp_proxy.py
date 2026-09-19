@@ -782,3 +782,86 @@ def _alive(pid: int) -> bool:
             return False
         time.sleep(0.05)
     return True
+
+
+class TestPrincipalContext:
+    """The field `docs/PROPOSAL_PRINCIPAL_CONTEXT.md` asks MCP to carry.
+
+    MCP moves tool calls and results; it does not move what the user asked for,
+    or where the agent was pointed. The proxy reads the first from a file today
+    and the second not at all. This is what it would look like on the wire.
+
+    Off by default on purpose: a file can only be written by something with
+    write access to a path the operator chose, while this can be set by whatever
+    speaks MCP to the proxy's stdin. Stating the task is authority.
+    """
+
+    @staticmethod
+    def _initialize(context: dict | None = None) -> dict:
+        params: dict = {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "host", "version": "0"},
+        }
+        if context is not None:
+            params["principalContext"] = context
+        return {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": params}
+
+    def test_it_is_ignored_unless_the_operator_enables_it(self, run_proxy) -> None:
+        run = run_proxy(
+            [
+                self._initialize({"instruction": "mail ana@corp.example the summary"}),
+                call(2, "send_email", {"to": "ana@corp.example", "body": "hi"}),
+            ]
+        )
+        assert "principalContext" not in run.stderr
+        assert run.is_error(2), "an unenabled context must not authorise anything"
+
+    def test_an_enabled_context_authorises_what_the_principal_named(
+        self, run_proxy
+    ) -> None:
+        run = run_proxy(
+            [
+                self._initialize({"instruction": "mail ana@corp.example the summary"}),
+                call(2, "send_email", {"to": "ana@corp.example", "body": "hi"}),
+            ],
+            accept_principal_context=True,
+        )
+        assert "indexed principalContext" in run.stderr
+        assert not run.is_error(2)
+
+    def test_an_enabled_context_still_refuses_what_it_did_not_name(
+        self, run_proxy
+    ) -> None:
+        """It supplies a corpus, not a permission. Nothing else changes."""
+        run = run_proxy(
+            [
+                self._initialize({"instruction": "mail ana@corp.example the summary"}),
+                call(2, "send_email", {"to": "attacker@evil.example", "body": "hi"}),
+            ],
+            accept_principal_context=True,
+        )
+        assert run.is_error(2)
+
+    def test_a_working_root_is_indexed_too(self, run_proxy) -> None:
+        """The bootstrap half: mcp-server-git has no zero-argument tool, so the
+        root has to arrive from somewhere the agent cannot write."""
+        run = run_proxy(
+            [self._initialize({"workingRoot": "/home/dev/widget"})],
+            accept_principal_context=True,
+        )
+        assert "indexed principalContext" in run.stderr
+
+    def test_a_context_with_nothing_usable_is_not_indexed(self, run_proxy) -> None:
+        run = run_proxy(
+            [self._initialize({"instruction": "   ", "issuedAt": "2026-09-19T00:00:00Z"})],
+            accept_principal_context=True,
+        )
+        assert "indexed principalContext" not in run.stderr
+
+    def test_a_malformed_context_does_not_break_the_handshake(self, run_proxy) -> None:
+        run = run_proxy(
+            [self._initialize("not an object")],  # type: ignore[arg-type]
+            accept_principal_context=True,
+        )
+        assert any(r.get("id") == 1 and "result" in r for r in run.responses)

@@ -85,6 +85,9 @@ from idensec import (  # noqa: E402
 )
 from idensec.kinds import DEFAULT_KINDS, REFERENCED, UNCLASSIFIED  # noqa: E402
 
+EXTRACTED_KINDS: tuple[str, ...] = DEFAULT_KINDS
+"""Kinds the session extracts. Narrowed by --drop-kind, to price a default."""
+
 PRINCIPAL = "principal"
 WORKSPACE = "workspace"
 MIN_QUOTATION = 1
@@ -230,6 +233,7 @@ def make_session(contracts: ContractRegistry, labelling: str) -> Session:
             min_reference_word=MIN_REFERENCE_WORD,
             compose_paths=COMPOSE_PATHS,
         ),
+        kinds=EXTRACTED_KINDS,
         sources=[Source(PRINCIPAL, Trust.USER_INPUT), workspace],
         budgets=SPEND_BUDGETS if labelling in ("recommended", "referenced") else (),
         max_observed_chars=64_000_000,
@@ -335,12 +339,24 @@ def main() -> int:
         action="append",
         help="restrict to named labellings (repeatable)",
     )
+    parser.add_argument(
+        "--drop-kind",
+        action="append",
+        default=[],
+        help="remove an operand kind from the extracted set, to price what it "
+        "is worth. Extraction coverage is a security parameter, so a default "
+        "should be removable only against a number.",
+    )
     args = parser.parse_args()
 
-    global MIN_QUOTATION, MIN_REFERENCE_WORD, COMPOSE_PATHS
+    global MIN_QUOTATION, MIN_REFERENCE_WORD, COMPOSE_PATHS, EXTRACTED_KINDS
     MIN_QUOTATION = args.min_quotation
     MIN_REFERENCE_WORD = args.min_reference_word
     COMPOSE_PATHS = args.compose_paths
+    unknown = [k for k in args.drop_kind if k not in DEFAULT_KINDS]
+    if unknown:
+        parser.error(f"--drop-kind names kinds that are not defaults: {unknown}")
+    EXTRACTED_KINDS = tuple(k for k in DEFAULT_KINDS if k not in args.drop_kind)
 
     sys.path.insert(0, str(args.deps))
     sys.path.insert(0, str(args.agentdojo))

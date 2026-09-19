@@ -1192,6 +1192,52 @@ excluded rather than assumed.
 
 ---
 
+## Thread 3q — Writing the proposal MCP has needed three times (2026-09-19)
+
+`FACT` — Thread 3b found that MCP carries no trusted channel for the principal's
+instruction, and left it as a `HYPOTHESIS` that a protocol field would help.
+Thread 3n found the same gap a second way, from the other end: all twelve
+``mcp-server-git`` tools take ``repo_path``, there is no zero-argument tool to
+ask, and so under the unattributed rule the *first* call of every session is
+denied. The missing channel is not only the task statement. It is also **the
+root the agent has been pointed at**, which today is a command-line argument to
+the server that nothing downstream can see.
+
+`RESULT` — Written as [`PROPOSAL_PRINCIPAL_CONTEXT.md`](PROPOSAL_PRINCIPAL_CONTEXT.md):
+an optional ``principalContext`` object carried in ``initialize``, with
+``instruction``, ``workingRoot`` and ``issuedAt``, four normative requirements,
+and an explicit list of what it deliberately does not do. It proposes no
+enforcement and no policy language; a server that ignores it is unaffected.
+
+`RESULT` — Implemented behind ``accept_principal_context``, **off by default**,
+with six tests. Not off because it is unfinished. ``task_file`` can only be
+written by something with write access to a path the operator chose; this can be
+set by whatever speaks MCP to the proxy's stdin. Enabling it widens *who may
+state the principal's task* from one file to one pipe, and stating the task is
+authority — an attacker who can declare it can authorise their own calls. That
+is the same argument that rules out a ``declare_task`` tool, applied one layer
+further out, and it is the sort of trade that should be visible at the
+configuration rather than discovered afterwards.
+
+`FACT` — The tests pin the property that matters: an enabled context supplies a
+**corpus, not a permission**. It authorises the address the principal named and
+still refuses one they did not.
+
+`INFERENCE` — The argument for the field is not that IDENSEC wants it. It is
+that CaMeL, PACT, PAuth and comparable designs all take the trusted user query
+as an input, so each needs a private side channel before it can deploy over MCP
+— and the side channels will not be the same, so a host cannot serve two at
+once. That characterisation of the literature remains `INFERENCE` from search
+summaries; the gap in MCP itself is `FACT`, verified by implementation.
+
+`FACT` — **Writing a proposal is not making one.** Nobody outside this
+repository has seen it, no conversation has taken place with the MCP
+maintainers, and the roadmap item stays ``next`` for that reason. What exists is
+an artifact and a reference implementation, which is the part that was in this
+project's control.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

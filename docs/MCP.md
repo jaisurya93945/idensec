@@ -170,6 +170,7 @@ with.
 | `compose_urls` | The same for **URLs**, and separate on purpose: a composed filename is an address, a composed URL is an egress destination. Off by default. Six measured cases in [`BENCHMARKS.md`](BENCHMARKS.md), one of which is caught by escalation rather than denial — if you also set `confidential_egress` to allow, that leak goes through. See ADR-0013. |
 | `contracts` | Path to a contract file. Absent ⇒ every tool is unknown ⇒ denied. |
 | `task_file` | See above. Absent ⇒ no trusted corpus. |
+| `accept_principal_context` | Read the principal's instruction from a `principalContext` object the host sends in `initialize`, instead of (or as well as) `task_file`. **Defaults false**, and not because it is unfinished: a file can only be written by something with write access to a path you chose, while this can be set by whatever speaks MCP to the proxy's stdin. Stating the task is authority — an attacker who can declare it can authorise their own calls. Enable it when the host is provably the only writer of that pipe. See [`PROPOSAL_PRINCIPAL_CONTEXT.md`](PROPOSAL_PRINCIPAL_CONTEXT.md). |
 | `seal_tool_descriptions` | Defaults true. Turning it off opens the tool-poisoning path and is logged loudly at startup. |
 
 Results are recorded at `<tool>.result`, which is what makes a grant like

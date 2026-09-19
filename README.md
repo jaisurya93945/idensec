@@ -375,6 +375,17 @@ egress tool. Now universal for composed values:
 python3 benchmarks/url_composition.py
 ```
 
+**A protocol gap, written up as a proposal** — MCP moves tool calls and tool
+results. It does not move what the user asked for, or where the agent was
+pointed. That was found twice: once by implementing the proxy, and once by
+`mcp-server-git`, whose twelve tools all take `repo_path` and which offers no
+zero-argument tool to ask — so a containment design denies the first call of
+every session. [`PROPOSAL_PRINCIPAL_CONTEXT.md`](docs/PROPOSAL_PRINCIPAL_CONTEXT.md)
+drafts the field, and the proxy implements it behind `accept_principal_context`
+— off by default, because a file can only be written by something with write
+access to it while a pipe can be written by whatever speaks MCP to the proxy.
+**Unsubmitted and unreviewed by anyone outside this repository.**
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```

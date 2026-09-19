@@ -14,6 +14,10 @@ import types
 STUB_ROOTS = (
     "anthropic", "openai", "cohere", "google", "langchain", "langchain_core",
     "tenacity", "dotenv", "rich", "click",
+    # Pulled in by agentdojo.agent_pipeline, which this evaluation never runs.
+    # Stubbed rather than installed so that a network client is not present in
+    # a process that must not make network calls.
+    "requests", "httpx",
 )
 
 

@@ -60,6 +60,22 @@ class ProxyConfig:
 
     audit_file: Path | None = None
     emit_contracts: Path | None = None
+    accept_principal_context: bool = False
+    """Whether to index a ``principalContext`` the host sends on the wire.
+
+    A reference implementation of the field proposed in
+    ``docs/PROPOSAL_PRINCIPAL_CONTEXT.md``. **Off by default**, and not because
+    the feature is unfinished: ``task_file`` can only be written by something
+    with write access to a path the operator chose, while this can be set by
+    whatever speaks MCP to the proxy's stdin. Turning it on widens who may state
+    the principal's task from one file to one pipe, and stating the task is
+    authority -- an attacker who can declare it can authorise their own calls.
+
+    Enable it when the host is provably the only writer of that pipe, which is
+    the normal case for a host that launches the proxy as a child process, and
+    not otherwise.
+    """
+
     seal_tool_descriptions: bool = True
     """Tool descriptions are server-supplied and therefore attacker territory
     (MCP tool poisoning). Sealing them is the default; turning it off is a
@@ -123,6 +139,9 @@ class ProxyConfig:
             task_file=cls._optional(base, data.get("task_file")),
             audit_file=cls._optional(base, data.get("audit")),
             emit_contracts=cls._optional(base, data.get("emit_contracts")),
+            accept_principal_context=bool(
+                data.get("accept_principal_context", False)
+            ),
             seal_tool_descriptions=bool(data.get("seal_tool_descriptions", True)),
             budgets=cls._budgets(data.get("budgets", ())),
             server_command=tuple(data.get("server", ())),

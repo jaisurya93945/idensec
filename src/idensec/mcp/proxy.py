@@ -107,6 +107,44 @@ class Proxy:
             self.session.observe(self._principal_id, task)
             self._note(f"indexed principal task ({len(task)} chars)")
 
+    def _take_principal_context(self, message: Message) -> None:
+        """Index a ``principalContext`` the host supplied on the wire.
+
+        A reference implementation of
+        [`PROPOSAL_PRINCIPAL_CONTEXT.md`](../../../docs/PROPOSAL_PRINCIPAL_CONTEXT.md),
+        which asks MCP to carry the principal's instruction and the root the
+        agent was pointed at. Today the protocol carries neither, so the task
+        arrives from a file and the root arrives not at all.
+
+        **Off unless the operator turns it on, and the reason is a real
+        difference in trust.** ``task_file`` can only be set by something with
+        write access to that path. This can be set by whatever speaks MCP to
+        this proxy's stdin -- which is the host if and only if the host is the
+        only thing that can reach it. Enabling this widens "who may state the
+        principal's task" from one file to one pipe, and a task statement is
+        authority: an attacker who can declare the task can authorise their own
+        calls. That is the whole reason there is no ``declare_task`` tool.
+        """
+        if not self.config.accept_principal_context:
+            return
+        params = message.params
+        context = params.get("principalContext")
+        if not isinstance(context, dict):
+            return
+        parts = [
+            str(context[field])
+            for field in ("instruction", "workingRoot")
+            if isinstance(context.get(field), str) and context[field].strip()
+        ]
+        if not parts:
+            return
+        with self._lock:
+            self.session.observe(self._principal_id, "\n".join(parts))
+        self._note(
+            f"indexed principalContext from the host "
+            f"({sum(len(p) for p in parts)} chars, {len(parts)} field(s))"
+        )
+
     def _note(self, text: str) -> None:
         self._log.write(f"[idensec] {text}\n".encode())
         self._log.flush()
@@ -160,6 +198,12 @@ class Proxy:
         Returns the message to forward, or ``None`` when the proxy has answered
         it itself -- which is what a denial is.
         """
+        if message.method == "initialize" and message.is_request:
+            self._take_principal_context(message)
+            return message
+        if message.method == "notifications/principal_context_changed":
+            self._take_principal_context(message)
+            return message
         if message.method != "tools/call" or not message.is_request:
             return message
 
