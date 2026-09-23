@@ -55,6 +55,15 @@ from .jsonrpc import Message, error_result, read_messages, write_message
 
 __all__ = ["Proxy", "run"]
 
+_STRUCTURAL_PARAMS = frozenset({"requestId", "progressToken"})
+"""Parameters of a server-initiated message that must survive sealing.
+
+Both pair one message with another: ``requestId`` says which call a
+cancellation cancels, ``progressToken`` which request an update belongs to.
+Replacing either with a handle breaks the pairing, which is the protocol
+failing rather than the content being contained.
+"""
+
 ESCALATION_TEXT = (
     "This action requires approval from the principal before it can proceed."
 )
@@ -78,6 +87,7 @@ class Proxy:
         self._audit_seen = 0
         self._drafts: dict[str, dict[str, Any]] = {}
         self._host_out: IO[bytes] | None = None
+        self._self_answers: dict[Any, Message] = {}
 
         self.session = Session(
             contracts=config.contracts,
@@ -240,7 +250,7 @@ class Proxy:
     def handle_inbound(self, message: Message) -> Message | None:
         """Inspect a message on its way back to the host."""
         if not message.is_response:
-            return message
+            return self._seal_server_initiated(message)
         result = message.result
         if result is None:
             return message
@@ -253,6 +263,50 @@ class Proxy:
         if self._is_protocol_metadata(result):
             return message
         return self._seal_result(message, result, path="result")
+
+    def _seal_server_initiated(self, message: Message) -> Message:
+        """Seal content the server pushes without being asked for it.
+
+        Sealing was written as *every result*, on the argument that enumerating
+        the content-bearing methods is a losing game against a protocol that
+        keeps adding them. The implementation inverted the default for methods
+        and not for **message kinds**: it sealed responses and let everything
+        else past. So a server could put an attacker's address in a
+        ``notifications/message`` and the model saw it in clear.
+
+        Found by building the HTTP transport, where a server-initiated stream is
+        a first-class thing rather than an occasional line on a pipe -- but the
+        gap was in the stdio proxy too, and had been since it was written.
+
+        **This is a confidentiality and defusal gap, not an authority bypass.**
+        The write boundary is what refuses an injected destination, and it did:
+        an address learned from an unsealed notification was still refused at
+        the next call. What was lost is that the model saw the address as text
+        it could repeat into a payload field, and that handle-shaped content in
+        it was never defused (T05).
+
+        Two parameter names are named exceptions, because sealing them would
+        break the protocol rather than protect it: ``requestId`` pairs a
+        cancellation with the call it cancels, and ``progressToken`` pairs an
+        update with the request that is progressing.
+        """
+        method = message.method
+        if method is None:
+            return message
+        params = message.payload.get("params")
+        if not isinstance(params, dict) or not params:
+            return message
+        structural = {k: v for k, v in params.items() if k in _STRUCTURAL_PARAMS}
+        content = {k: v for k, v in params.items() if k not in _STRUCTURAL_PARAMS}
+        if not content:
+            return message
+        with self._lock:
+            sealed = self.session.observe(
+                self.config.source.id, content, path=f"{method}.params"
+            )
+        payload = dict(message.payload)
+        payload["params"] = {**sealed, **structural}
+        return Message(payload)
 
     @staticmethod
     def _is_protocol_metadata(result: dict[str, Any]) -> bool:
@@ -387,7 +441,39 @@ class Proxy:
             self._flush_audit()
 
     def _respond(self, message: Message) -> None:
-        self.send_to_host(message)
+        """Deliver a message the proxy generated itself -- which means a denial.
+
+        On stdio there is one output stream and this writes to it. Over HTTP a
+        denial is the body of the very request being denied, and there is no
+        stream to write to yet, so the transport collects it by request id
+        instead. Both behind one method, so :meth:`handle_outbound` does not
+        have to know which transport it is running under.
+        """
+        if self._host_out is not None:
+            self.send_to_host(message)
+            return
+        with self._lock:
+            self._self_answers[message.id] = message
+
+    def note_relay_dropped(self, count: int) -> None:
+        """A denial we owed the host could not be delivered.
+
+        Happens when a server answers a JSON-RPC request with something that is
+        not a JSON-RPC body -- an error page, a bare 202 -- and there is nowhere
+        to attach the refusal we generated. The call was still refused and never
+        reached the server; the host simply will not be told why. Logged rather
+        than swallowed, because a decision that vanishes is the one thing an
+        audit trail must not do quietly.
+        """
+        self._note(
+            f"{count} denial(s) could not be returned to the host: the server's "
+            "reply was not a JSON-RPC body. The calls were still refused."
+        )
+
+    def take_self_answer(self, request_id: Any) -> Message | None:
+        """Collect the answer the proxy gave in place of forwarding a request."""
+        with self._lock:
+            return self._self_answers.pop(request_id, None)
 
 
 def run(

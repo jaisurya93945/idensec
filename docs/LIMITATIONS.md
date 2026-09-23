@@ -365,6 +365,26 @@ with its own context — IDENSEC sees only what that sub-agent returns. The soun
 option today is to label sub-agents conservatively. A portable label format is
 on the roadmap. See [`DELEGATION_MODEL.md`](DELEGATION_MODEL.md).
 
+### 4.5b Server-initiated messages were not sealed, until they were
+
+Sealing is stated as *every result*, on the argument that enumerating
+content-bearing methods loses against a protocol that keeps adding them. The
+implementation inverted that default for **methods** and not for **message
+kinds**: it sealed responses and passed everything else. A server could
+therefore put an attacker's address in a `notifications/message` and the model
+saw it in clear.
+
+Fixed — server-initiated notifications and requests now go through the read
+boundary, with `requestId` and `progressToken` named as exceptions because
+sealing them breaks the pairing they exist for.
+
+Worth recording rather than quietly patching, for two reasons. It was a
+**confidentiality and defusal** gap, not an authority bypass: the write boundary
+still refused the address at the next call, which a test now pins. And it had
+been there since the proxy was written, found only when a second transport made
+a server-initiated stream a first-class thing rather than an occasional line on
+a pipe.
+
 ### 4.6 The denial channel is bounded, measured, not closed
 
 Denials leak roughly one bit each. The budget bounds the total,
@@ -390,7 +410,7 @@ counterfactual provenance is the correct general fix (ADR-0009).
 | **Single-threaded sessions** | A session belongs to one linear execution. Sharing one across concurrent agents would cross-contaminate provenance — a security bug, not a performance one. |
 | **Audit is integrity, not authenticity** | A hash chain proves the log was not altered. It does not prove IDENSEC wrote it. An attacker with write access can rewrite the chain from genesis; ship records off-host if that is in your threat model. |
 | **MCP needs an out-of-band task channel** | The protocol has nowhere to carry the principal's instruction, and the agent cannot be asked for it without creating a total bypass. The proxy reads it from a host-written file; a host that cannot provide one gets no trusted corpus and should run in observe mode rather than claim enforcement. A protocol field is drafted in [`PROPOSAL_PRINCIPAL_CONTEXT.md`](PROPOSAL_PRINCIPAL_CONTEXT.md) with a working implementation behind `accept_principal_context`, **unsubmitted and unreviewed by anyone outside this repository**. See [`MCP.md`](MCP.md). |
-| **stdio transport only** | The proxy does not yet speak streamable HTTP. Framework adapters are roadmap, not code. |
+| **Two transports, one enforcement** | stdio and streamable HTTP, sharing `handle_outbound`/`handle_inbound` unchanged; the tests assert the decisions do not vary with transport. The HTTP listener binds loopback, because whatever can reach the socket can speak MCP to it. Framework adapters are roadmap, not code. |
 | **The proxy owns its server's lifetime, and had to be taught to** | Closing the proxy's stdin is the shutdown MCP already has, and the proxy then ends the server it launched — stdin close, then `terminate`, then `kill`. Killing the proxy outright instead skips that, so `SIGTERM` and `SIGHUP` are handled rather than left to their default action. Before this, a host that stopped the proxy left the server running; on a server holding a repository, database or port, that blocks the next one. Found by an example that orphaned an `mcp-server-git` per run. |
 | **A parameter whose sub-fields have different roles must say so** | `create_entities(entities)` takes `[{name, entityType, observations}]`: the name is authority, the note is content. `ParameterContract.payload_paths` names the exemptions, one at a time, on a parameter that stays `AUTHORITY`. Forgetting one costs a denial; the opposite arrangement would make forgetting one a bypass. It is another per-API declaration, and `idensec.lint` reports a writing tool where nothing bears authority. |
 | **Reference binding needs a collection per parameter, and real servers do not supply one** | `ParameterContract.collection` says which directory an id addresses. `derive_contract` drafts it from `<noun>_id` names — which fires on **2 of 60** authority parameters across seven published MCP servers, because they name things `path`, `repo_path` and `branch_name`. Against those servers every collection is hand-authored or reference binding never runs. A wrong draft costs a denial; an absent one makes the grant inert, which `idensec.lint` reports. |

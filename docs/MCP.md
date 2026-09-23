@@ -159,6 +159,7 @@ with.
 | Field | Notes |
 | --- | --- |
 | `server` | argv of the MCP server to launch. The proxy speaks MCP to your host on stdio and to this process on pipes. |
+| `server_url` | Endpoint of a remote server, for the **streamable HTTP** transport. The proxy then listens on HTTP and forwards to this URL. Exactly one of `server` and `server_url` belongs in a config; naming both is refused, because one config is one server on one transport. |
 | `source.trust` | **No default.** Labelling a source is the one decision IDENSEC cannot make for you, and the config refuses to load without it. |
 | `source.authoritative_for` | Operand kinds this server may supply as authority, *anywhere in its output*. A corporate directory gets `["email"]`; a web fetcher gets `[]`. |
 | `source.authoritative_paths` | The same, per **field path**. This is the setting that makes retrieve-then-act work: a workspace is authoritative about the `sender` of a message and not about its `body`, and both arrive from one source. A whole-source grant cannot express that, which is why deployments using only `authoritative_for` are choosing between refusing everything and trusting message bodies. |
@@ -232,6 +233,31 @@ Point your MCP host at the proxy instead of the server:
     "args": ["-m", "idensec.mcp", "--config", "/etc/idensec/docs.json"]
 }}}
 ```
+
+### Streamable HTTP
+
+For a server you reach over HTTP rather than launch, name it with `server_url`
+and point your host at the proxy's own address:
+
+```
+python -m idensec.mcp --config docs.json --listen 127.0.0.1 --port 8808
+```
+
+```json
+{ "mcpServers": { "docs": { "url": "http://127.0.0.1:8808/mcp" } } }
+```
+
+The enforcement is the same code — `handle_outbound` on the way out,
+`handle_inbound` on the way back — and the tests assert that the decisions do
+not change with the transport. Three things differ, and all three are read
+boundaries: a `POST` may be answered with JSON **or** with an event stream, and
+`GET` opens a server-initiated stream that carries content the agent never asked
+for.
+
+> **It listens on loopback by default, and that default is load-bearing.**
+> Whatever can reach the socket can speak MCP to it, exactly as whatever can
+> write the stdio proxy's stdin can. The proxy is not a trust boundary against
+> its own client. Widen `--listen` only behind something that is.
 
 ---
 

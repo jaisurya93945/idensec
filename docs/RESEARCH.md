@@ -1289,6 +1289,62 @@ like locally.
 
 ---
 
+## Thread 3s — The second transport, and what it found in the first (2026-09-23)
+
+`EXPERIMENT` — Built the streamable HTTP transport: the proxy as an HTTP server
+facing the host and an HTTP client facing the real one, reusing
+``handle_outbound`` and ``handle_inbound`` unchanged. Standard library only, so
+the zero-dependency property survives (ADR-0006). Sixteen tests against a
+hostile HTTP server over a real socket.
+
+`RESULT` — **Server-initiated messages were never sealed, on either transport.**
+``handle_inbound`` opened with ``if not message.is_response: return message``.
+So a server could put an attacker's address in a ``notifications/message`` and
+the model saw it in clear -- and the same was true of ``sampling/createMessage``,
+which hands the *model* text the server chose.
+
+`FACT` — The proxy's own docstring states the rule this broke: sealing is
+written as *every result* rather than as a list of methods, because
+"enumerating the content-bearing methods is a losing game against a protocol
+that keeps adding them, so the default is inverted". The implementation
+inverted the default for **methods** and not for **message kinds**. The
+principle was right and only two thirds applied.
+
+`FACT` — **It is a confidentiality and defusal gap, not an authority bypass**,
+and the distinction is not a softening. The write boundary still refused the
+address at the next call -- a test pins exactly that -- so nothing was
+authorised that should not have been. What was lost is that the model saw the
+address as text it could repeat into a payload field, and that handle-shaped
+content in it was never defused (T05).
+
+`RESULT` — Fixed by routing server-initiated params through ``observe``, with
+``requestId`` and ``progressToken`` as named exceptions: sealing those breaks
+the pairing they exist for, which is the protocol failing rather than the
+content being contained.
+
+`RESULT` — **A batch is a container, not a method.** ``jsonrpc.py``'s rule is to
+pass through what we do not understand, which is right for methods and wrong
+for containers: a JSON-RPC batch is a list that can hold a ``tools/call``, so
+forwarding it unexamined would be a bypass wearing a pass-through's clothes.
+The HTTP transport takes batches apart, decides each element, and forwards only
+the survivors. (MCP removed batching in 2025-06-18; this exists because a host
+that still sends one must not get a free pass.)
+
+`FACT` — One transport bug of our own, found by a test rather than by review:
+the SSE relay sent ``Content-Type`` twice, once forwarded and once its own.
+``http.client`` joins duplicate headers with a comma, so the value arrived as
+``text/event-stream, text/event-stream`` and a client matching on it stops
+recognising its own stream.
+
+`INFERENCE` — Fourth consecutive milestone in which a **new shape** found
+something the existing shapes could not: an egress tool found the composition
+hole, and a server-initiated stream found the sealing hole. Neither is a new
+*server*; both are new kinds of message. The pattern from the last review entry
+holds and sharpens -- it is not servers that find defects, it is shapes, and
+there are more shapes than servers.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

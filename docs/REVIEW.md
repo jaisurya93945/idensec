@@ -6,6 +6,89 @@ comfortable, it was written badly.
 
 ---
 
+## 2026-09-23 — the second transport found a hole in the first
+
+Three things landed: the MCP field this project has now needed three times, a
+default priced rather than argued about, and the streamable HTTP transport. The
+third produced the result worth writing down.
+
+### Server-initiated messages were never sealed
+
+`handle_inbound` opened with `if not message.is_response: return message`. So a
+server could put an attacker's address in a `notifications/message` — or in a
+`sampling/createMessage`, which hands the *model* text the server chose — and it
+reached the model in clear.
+
+The proxy's own docstring states the rule this broke. Sealing is written as
+*every result* rather than as a list of methods, because "enumerating the
+content-bearing methods is a losing game against a protocol that keeps adding
+them, so the default is inverted". **The implementation inverted that default
+for methods and not for message kinds.** The principle was right; two thirds of
+it was applied.
+
+It is a confidentiality and defusal gap rather than an authority bypass — the
+write boundary still refused the address at the next call, and a test now pins
+that — but the distinction is not a softening. The point of sealing is that the
+model cannot repeat what it never saw in clear.
+
+### What decided `account_number`, and why the question was backwards
+
+Removing it changes nothing on AgentDojo: five labellings, four suites, two
+quotation floors, not one call. The reason it stays is unrelated to that.
+
+Dropping a kind does not narrow authority. An extracted value is checked against
+a grant for its own kind; an unextracted one is checked against `unclassified`.
+So narrowing extraction **demotes** the value into the most permissive grant in
+the vocabulary — and on a `FINANCIAL` tool that flips an injected account number
+from deny to allow.
+
+I had the asymmetry documented backwards in `DEFAULT_KINDS` ("a missed seal is
+not a bypass"), which is true only for a value nothing attributes. That was the
+stated ground for excluding `ipv4`, so the exclusion now carries a cost it was
+not previously admitting to.
+
+### Is the thesis disproven?
+
+**No, and the curve has not moved in four milestones.** Everything since the
+coding-agent work has been deployability, diagnosis and correctness: a second
+transport, a preview tool, a proposal, two holes closed. None of it changes
+91.8% / 64.9%, and none of it is evidence anyone wants the thing.
+
+That is not a complaint about the work — a design that cannot deploy is not
+worth a better number — but it should be said plainly rather than left for a
+reader to notice: **the last improvement to the central measurement was on
+2026-09-13.**
+
+### What should happen next
+
+1. **Stop building transports and mechanisms.** The list of things that would
+   change what we know is now almost entirely blocked on access (a model, real
+   tool-output labels, primary literature) or on people (users, a conversation
+   with the MCP maintainers).
+2. **Submit the proposal.** Written is not proposed, and that is the one
+   unblocked item on the list that is not more code.
+3. **Users.** Sixth consecutive entry.
+
+### The strongest criticism, updated again
+
+> *"You keep finding holes in your own work and calling that a process. Four
+> milestones running, the thing that was wrong was something you had already
+> written down correctly and then not done."*
+
+That is the sharpest form of it and it is accurate twice over in this entry: the
+sealing default was documented as inverted and was not, and the extraction
+asymmetry was documented backwards. Both were in prose I wrote, reviewed, and
+cited approvingly in later entries.
+
+The defence is thin and worth stating as thin. A design whose rules are written
+down can be checked against its implementation; one whose rules are not cannot.
+Every one of these was found by building something that exercised the rule from
+a new angle, and each is now a regression test. That is a process that converts
+documentation into tests over time. It is not a process that gets things right
+first.
+
+---
+
 ## 2026-09-18 — a mechanism for one server found a hole in a mechanism for another
 
 The roadmap has listed *composition beyond paths* since ADR-0012 shipped, with a

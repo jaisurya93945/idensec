@@ -386,6 +386,20 @@ drafts the field, and the proxy implements it behind `accept_principal_context`
 access to it while a pipe can be written by whatever speaks MCP to the proxy.
 **Unsubmitted and unreviewed by anyone outside this repository.**
 
+**Two transports, one enforcement** — the proxy now speaks streamable HTTP as
+well as stdio, on the standard library alone, reusing the same two interception
+points. Sixteen tests against a hostile HTTP server over a real socket assert
+that the decisions do not change with the transport.
+
+Building it found a gap in the stdio proxy that had been there since it was
+written: **server-initiated messages were never sealed.** Sealing is stated as
+*every result*, and the implementation inverted that default for methods but not
+for message kinds — so an address in a `notifications/message` reached the model
+in clear. It was a confidentiality and defusal gap rather than an authority
+bypass (the write boundary still refused the address, and a test says so), and
+it took a transport where a server-initiated stream is a first-class thing to
+notice.
+
 **Latency** — `admit()` is sub-millisecond at typical session length:
 
 ```

@@ -113,6 +113,28 @@ jobs:
       - name: Benchmarks run
         run: python benchmarks/bench_monitor.py --quick
 
+      - name: The library still imports no third-party HTTP stack
+        # The streamable transport is http.server and http.client. A web
+        # framework would break the property that makes this safe to put in a
+        # data path, and the import check above only sees what `import idensec`
+        # pulls in -- the transport module is imported lazily by the CLI.
+        run: |
+          python - <<'PY'
+          import subprocess, sys, json
+          out = subprocess.run([sys.executable, "-c",
+              "import idensec.mcp.streamable, sys, json;"
+              "std = set(sys.stdlib_module_names);"
+              "print(json.dumps(sorted(n for n, m in sys.modules.items()"
+              " if '.' not in n and n not in std and not n.startswith('_')"
+              " and n != 'idensec' and getattr(m, '__file__', '')"
+              " and 'site-packages' in (m.__file__ or ''))))"],
+              capture_output=True, text=True, check=True)
+          extra = json.loads(out.stdout)
+          if extra:
+              sys.exit(f"the HTTP transport pulled in: {extra}")
+          print("clean: stdlib only")
+          PY
+
       - name: Contract drafting survives real MCP schemas
         # Replays tools/list captured from seven published servers. It runs
         # offline from the checked-in corpus, and exists because every defect

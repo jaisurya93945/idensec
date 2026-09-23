@@ -85,6 +85,15 @@ class ProxyConfig:
     """Session-level aggregate limits. Every other check judges one call alone."""
 
     server_command: tuple[str, ...] = field(default_factory=tuple)
+    """argv of a server to launch, for the stdio transport."""
+
+    server_url: str = ""
+    """Endpoint of a server to reach, for the streamable HTTP transport.
+
+    Exactly one of ``server`` and ``server_url`` belongs in a config. Both would
+    be two servers, and the config says which transport it is by which one it
+    names.
+    """
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], *, base: Path) -> ProxyConfig:
@@ -122,6 +131,12 @@ class ProxyConfig:
         if policy_name not in POLICY_PRESETS:
             raise ConfigError(f"policy must be one of {sorted(POLICY_PRESETS)}")
 
+        if data.get("server") and data.get("server_url"):
+            raise ConfigError(
+                "config names both 'server' and 'server_url'. One config is one "
+                "server on one transport; naming both is two."
+            )
+
         contracts_path = data.get("contracts")
         if contracts_path:
             resolved = cls._resolve(base, contracts_path)
@@ -145,6 +160,7 @@ class ProxyConfig:
             seal_tool_descriptions=bool(data.get("seal_tool_descriptions", True)),
             budgets=cls._budgets(data.get("budgets", ())),
             server_command=tuple(data.get("server", ())),
+            server_url=str(data.get("server_url", "")),
         )
 
     @classmethod
