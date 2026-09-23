@@ -1187,6 +1187,92 @@ every part of it. Ordinary values are unaffected.
 
 ---
 
+## Pricing a default operand kind (2026-09-23)
+
+`account_number` has sat in `DEFAULT_KINDS` with an open question against it
+since the read-boundary study: it matches JavaScript constants and millisecond
+timestamps in code-heavy output, and [`ROADMAP.md`](ROADMAP.md) recorded the
+decision as **owed**. Removing a default is a security change, so it was held
+until there was a number.
+
+```
+python3 benchmarks/agentdojo/run_eval.py ... --drop-kind account_number
+```
+
+### On AgentDojo it is worth exactly nothing
+
+Five labellings × four suites × two quotation floors, with the kind and without:
+
+| labelling | floor 1, with | floor 1, without | floor 3, with | floor 3, without |
+| --- | --- | --- | --- | --- |
+| strict | 95.6% / 34.0% | 95.6% / 34.0% | 96.1% / 34.0% | 96.1% / 34.0% |
+| permissive | 58.5% / 46.4% | 58.5% / 46.4% | 58.9% / 46.4% | 58.9% / 46.4% |
+| scoped | 85.9% / 69.1% | 85.9% / 69.1% | 92.4% / 57.7% | 92.4% / 57.7% |
+| recommended | 85.2% / 74.2% | 85.2% / 74.2% | 91.8% / 62.9% | 91.8% / 62.9% |
+| referenced | 91.3% / 64.9% | 91.3% / 64.9% | 91.8% / 64.9% | 91.8% / 64.9% |
+
+**Not one call changes.** AgentDojo's banking suite addresses accounts by IBAN,
+and its transaction ids are single digits, below the kind's eight-digit floor.
+The kind decides nothing there.
+
+### On real output it is 2 true positives out of 7
+
+Over the captured corpus: `31926819` in an invoice — exactly the target — twice,
+and five matches on `0000000000000001`-style strings inside a `git_show` diff.
+Those five are an artefact of the corpus capturing a diff of *this* repository,
+where the fixtures use sequential handle ids. They are not evidence about real
+repositories either way.
+
+### The measurement that decided it
+
+The intuition for removing a kind is that extraction is conservative: you lose a
+seal, and the unattributed rule still refuses the value at the write boundary.
+
+**That holds only for a value nothing attributes.** For a value an untrusted
+source really did emit, the *kind* is what the grant is checked against. Drop
+the kind and the value is checked against `unclassified` instead — which is the
+grant operators hand out most freely, because it is what makes anything work on
+a server whose values have no grammar (see *What a grant actually admits*).
+
+Measured on a `FINANCIAL`, `IRREVERSIBLE` tool, injected account number,
+principal never named it:
+
+| source grant | `account_number` extracted | removed |
+| --- | --- | --- |
+| `unclassified` only | deny | **allow** |
+| `account_number` only | allow | deny |
+| both | allow | allow |
+| nothing | deny | deny |
+
+> Narrowing extraction does not narrow authority. It **demotes** the value into
+> the most permissive grant in the vocabulary.
+
+**Decision: `account_number` stays.** Its cost is readability; its removal is a
+widening of authority, on the tool class where that is worst. The roadmap item
+is closed.
+
+### What this changes about `ipv4`
+
+`ipv4` is excluded from the defaults on the stated ground that *a missed seal is
+not a bypass*. That argument is incomplete in exactly the same way, and the
+exclusion carries the same cost: a deployment granting `unclassified` admits an
+injected address where a narrower grant would refuse it.
+
+It stays out — its collision with version strings is not resolvable from surface
+form, and a false positive mangles every version number an agent reads — but the
+docstring now says the trade runs in both directions rather than presenting it
+as free. `idensec.lint` reports a blanket `unclassified` grant, which is the
+configuration that makes either exclusion dangerous.
+
+### What this does not show
+
+- **One benchmark and one small corpus.** "Worth nothing on AgentDojo" is a
+  statement about AgentDojo, whose banking suite happens to use IBANs.
+- **The false-positive rate on real output is unmeasured**, because the only
+  code-heavy corpus available is our own repository.
+
+---
+
 ## Method notes
 
 - One untimed warm-up call per measurement, so lazily compiled regexes and

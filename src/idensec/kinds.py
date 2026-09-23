@@ -385,13 +385,39 @@ DEFAULT_KINDS: tuple[str, ...] = (
 Chosen to fail toward over-extraction *where the surface form is unambiguous*:
 a false positive costs readability, a false negative costs a seal.
 
-``ipv4`` is registered but deliberately excluded. Its surface form collides with
-version strings, and the collision is not resolvable deterministically -- see
-its description. The asymmetry that settles it: a missed seal is not a bypass,
-because an unsealed untrusted value still matches its source observation at the
-write boundary and is refused by the unattributed rule. A false positive, by
-contrast, mangles every version number the agent reads. Enable it per
-deployment:
+**Removing a kind from this set does more than stop sealing it, and the
+difference is load-bearing.** An extracted value is checked against a grant for
+*its own kind*; an unextracted one is checked against ``unclassified``. So
+narrowing extraction does not merely lose a seal -- it **demotes** the value
+into the most permissive grant an operator hands out, and a grant of
+``unclassified`` is the one they hand out most freely, because it is what makes
+anything work on a server whose values have no grammar.
+
+Measured, on a ``FINANCIAL`` and ``IRREVERSIBLE`` tool, with an account number
+planted by an injection and a source granted ``unclassified``:
+
+===========================  =====================  =========================
+source grant                 ``account_number`` in  ``account_number`` removed
+===========================  =====================  =========================
+``unclassified`` only        deny                   **allow**
+``account_number`` only      allow                  deny
+===========================  =====================  =========================
+
+That is why ``account_number`` stays, despite being worth **nothing** on
+AgentDojo -- identical security and utility at all five labellings with it and
+without -- and despite matching JavaScript constants and millisecond timestamps
+in code-heavy output. Its cost is readability; its removal is a widening of
+authority. See ``docs/BENCHMARKS.md``.
+
+``ipv4`` is registered but deliberately excluded, and that exclusion carries the
+same cost, now that the cost is known: a deployment granting ``unclassified``
+gets an injected address admitted where a narrower grant would refuse it. It
+stays out because its surface form collides with version strings and the
+collision is not resolvable deterministically -- a false positive mangles every
+version number the agent reads -- but the trade is a real one in both
+directions, not a free win. ``idensec.lint`` reports a blanket ``unclassified``
+grant, which is the configuration that makes either exclusion dangerous. Enable
+it per deployment:
 
     Session(kinds=(*DEFAULT_KINDS, "ipv4"), ...)
 """

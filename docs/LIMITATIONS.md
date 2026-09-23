@@ -329,7 +329,19 @@ A grant that admits too much is at least doing something an audit log will show.
 A grant that admits nothing is indistinguishable from one that works, until the
 denials start.
 
-### 4.3 Extraction coverage is a security parameter
+### 4.3 Extraction coverage is a security parameter — in both directions
+
+Narrowing extraction does **not** narrow authority. An extracted value is
+checked against a grant for its own kind; an unextracted one is checked against
+`unclassified`, which is the grant operators hand out most freely. So removing a
+kind demotes the value into the most permissive slot in the vocabulary.
+Measured: an injected account number on a `FINANCIAL` tool goes from **deny** to
+**allow** for a source granted `unclassified`, purely by dropping
+`account_number` from the extracted set ([`BENCHMARKS.md`](BENCHMARKS.md)).
+
+That is why `account_number` stays in the defaults despite being worth nothing
+on AgentDojo, and it is a cost the `ipv4` exclusion carries too — stated there
+now rather than presented as free.
 
 A value whose kind is not registered is never sealed. Nine kinds ship by
 default; domain identifiers (tenant ids, cluster names, internal ticket formats)

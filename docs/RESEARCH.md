@@ -1238,6 +1238,57 @@ project's control.
 
 ---
 
+## Thread 3r — A default priced, and the reason it survived (2026-09-23)
+
+`EXPERIMENT` — ``account_number`` has carried an open question since the
+read-boundary study: it matches JavaScript constants and millisecond timestamps
+in code-heavy output, and the roadmap recorded the decision as owed. Removing a
+default is a security change, so it was held until there was a number. Added
+``--drop-kind`` to the AgentDojo harness and swept five labellings × four suites
+× two quotation floors, with the kind and without.
+
+`RESULT` — **Not one call changes.** Identical security and utility everywhere.
+AgentDojo's banking suite addresses accounts by IBAN and its transaction ids are
+single digits, below the kind's eight-digit floor, so it decides nothing there.
+On the captured MCP corpus it is 2 true positives out of 7 — a real invoice
+account number twice, and five matches on sequential handle ids inside a diff of
+*this* repository, which is a corpus artefact rather than evidence.
+
+`RESULT` — **The question was the wrong way round.** The intuition for removing
+a kind is that extraction is conservative: you lose a seal, and the unattributed
+rule still refuses the value. That holds only for a value nothing attributes.
+For a value an untrusted source really emitted, the **kind is what the grant is
+checked against** — so an unextracted value is checked against ``unclassified``:
+
+| source grant | extracted | removed |
+| --- | --- | --- |
+| ``unclassified`` only | deny | **allow** |
+| ``account_number`` only | allow | deny |
+
+`INFERENCE` — The general statement, which is the durable part:
+**narrowing extraction does not narrow authority, it demotes the value into the
+most permissive grant in the vocabulary.** And ``unclassified`` is the grant
+operators hand out most freely — Thread 3o measured why: on a server whose
+values have no grammar it is the only grant that makes anything work.
+
+`FACT` — Decision: ``account_number`` stays. Its cost is readability; its
+removal is a widening of authority on the tool class where that is worst.
+
+`RESULT` — The same argument re-opens ``ipv4``. Its exclusion rests on *a missed
+seal is not a bypass*, which is now known to be incomplete, and it carries the
+same cost for a deployment granting ``unclassified``. It stays out — the
+collision with version strings is not resolvable from surface form — but the
+docstring now states the trade in both directions instead of presenting it as
+free. ``idensec.lint`` already reports the blanket ``unclassified`` grant that
+makes either exclusion dangerous.
+
+`INFERENCE` — Two threads apart, the same fact has now decided two different
+questions: ``unclassified`` is not a fallback, it is the widest grant in the
+system. Anything that routes a value into it is a widening, whatever it looks
+like locally.
+
+---
+
 ## Thread 4 — What we deliberately are not building
 
 `INFERENCE`, recorded here because negative decisions are cheaper to find in the

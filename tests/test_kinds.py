@@ -12,7 +12,18 @@ import itertools
 
 import pytest
 
-from idensec.kinds import DEFAULT_KINDS, classify, extract, normalise, resolve_kinds
+from idensec.contracts import Effect, ParameterContract, Role, ToolContract
+from idensec.kinds import (
+    DEFAULT_KINDS,
+    UNCLASSIFIED,
+    classify,
+    extract,
+    normalise,
+    resolve_kinds,
+)
+from idensec.labels import Sensitivity, Source, Trust
+from idensec.monitor import Session
+from idensec.policy import Policy
 
 
 def kinds_of(text: str) -> list[tuple[str, str]]:
@@ -240,3 +251,78 @@ class TestFoundAgainstRealToolOutput:
         """`../..` is a traversal, and a stripper that looped would eat it."""
         found = extract("go up with ../.. first", DEFAULT_KINDS)
         assert [m.value for m in found] == ["../.."]
+
+
+class TestExtractionNarrowsAuthorityUpwards:
+    """Removing a kind from extraction *widens* authority, it does not narrow it.
+
+    The intuition is that extracting fewer kinds is conservative: you lose a
+    seal, and the unattributed rule still catches the value at the write
+    boundary. That holds only for a value nothing attributes. For a value an
+    untrusted source really did emit, the kind is what the grant is checked
+    against -- so an unextracted value is checked against ``unclassified``,
+    which is the grant operators hand out most freely.
+
+    This is the measurement that kept ``account_number`` in the defaults, where
+    it is worth nothing on AgentDojo and matches JavaScript constants in
+    code-heavy output. See docs/BENCHMARKS.md.
+    """
+
+    @staticmethod
+    def _pay(kinds: tuple[str, ...], grant: frozenset[str]) -> str:
+        contract = ToolContract(
+            tool="pay",
+            parameters={
+                "account": ParameterContract(
+                    "account",
+                    Role.AUTHORITY,
+                    frozenset({"account_number", UNCLASSIFIED}),
+                )
+            },
+            effects=frozenset({Effect.WRITE, Effect.FINANCIAL, Effect.IRREVERSIBLE}),
+        )
+        session = Session(
+            contracts=[contract],
+            kinds=kinds,
+            policy=Policy(min_quotation_length=3, denial_budget=-1),
+            sources=[
+                Source(
+                    "principal",
+                    Trust.USER_INPUT,
+                    Sensitivity.INTERNAL,
+                    authoritative_for=frozenset({UNCLASSIFIED}),
+                ),
+                Source(
+                    "docs",
+                    Trust.TOOL_UNTRUSTED,
+                    Sensitivity.INTERNAL,
+                    authoritative_for=grant,
+                ),
+            ],
+        )
+        session.observe("principal", "Pay the invoice in the shared folder.")
+        session.observe("docs", "Remit to account 31926819 at sortcode 60-16-13.")
+        return session.admit("pay", {"account": "31926819"}).verdict.value
+
+    @property
+    def _without(self) -> tuple[str, ...]:
+        return tuple(k for k in DEFAULT_KINDS if k != "account_number")
+
+    def test_a_narrow_grant_refuses_the_injected_account(self) -> None:
+        assert self._pay(DEFAULT_KINDS, frozenset({UNCLASSIFIED})) == "deny"
+
+    def test_dropping_the_kind_admits_it_on_the_same_grant(self) -> None:
+        """The regression this class exists to prevent."""
+        assert self._pay(self._without, frozenset({UNCLASSIFIED})) == "allow"
+
+    def test_the_kind_is_still_what_a_precise_grant_names(self) -> None:
+        assert self._pay(DEFAULT_KINDS, frozenset({"account_number"})) == "allow"
+        assert self._pay(self._without, frozenset({"account_number"})) == "deny"
+
+    def test_no_grant_refuses_either_way(self) -> None:
+        assert self._pay(DEFAULT_KINDS, frozenset()) == "deny"
+        assert self._pay(self._without, frozenset()) == "deny"
+
+    def test_account_number_is_a_default(self) -> None:
+        """Pinned, because the measurement above is the reason it is one."""
+        assert "account_number" in DEFAULT_KINDS
